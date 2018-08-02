@@ -44,6 +44,7 @@ def argsparse():
 	parser.add_argument('-i', action='store', nargs='*', dest='data', metavar='file', help='xlsx files list to parse')
 	parser.add_argument('-acc', action='store', dest='acc', metavar='file', help='list of accession number with test number')
 	parser.add_argument('-add', action='store', dest='add', metavar='file', help='additional table with detection method')
+	parser.add_argument('-t', action='store')
 	args=parser.parse_args()
 	return args
 
@@ -72,14 +73,16 @@ def adding(desired,data):
 	return island
 
 def detection(desired,data,accession,islands):
-	df=pd.read_excel(data,index_col=0,header=2,usecols=[0,1,2,9,11,13,15,17,19])
+	add=[]
+	df=pd.read_excel(data,index_col=0,header=2,usecols=[0,1,2,5,9,11,13,15,17,19])
 	df=df.filter(like='landp',axis=0) 
 	df=df.reset_index()	
-	columns=df.columns[3:]
+	columns=[col.replace(' (%)','') for col in df.columns[3:]]
+	columns[0]='islandpick'
 	detection=df.values.tolist() 
 	for line in detection:
 		line[0]=accession[str(line[0].replace('islandpick_','').split('_')[0])]
-		line=[line[0], int(line[1]), int(line[2]),':'.join((columns[p]+'='+str(pour)) for p,pour in enumerate(line[3:]))]
+		line=[line[0], int(line[1]), int(line[2]),';'.join((columns[p]+'='+str(pour)) for p,pour in enumerate(line[3:]))]
 		#line=[line[0], int(line[1]), int(line[2]),'islanpick']
 		ID=line[0]+'_'+str(int(line[1]))+'_'+str(int(line[2]))
 		if ID in islands:
@@ -87,18 +90,18 @@ def detection(desired,data,accession,islands):
 			islands[islands.index(ID)].line.append('islanpick')
 		else:
 			line=Ilot(line,['ACCESSION','START','END','DETECTION'],desired)
-			islands.append(line)
-	return islands
+			add.append(line)
+	return add
 
-def writing(desired,islands):
+def writing(desired,islands,IDs):
 	timestamp("WRITING")
-	output=open('output.out','w') # output file
+	output=open('output/output.out','w') # output file
 	#output_pos=open('output.pos.out','w') # output file
 	output.write('#ID'+'\t'+'\t'.join(desired))
 	#output_pos.write('#ID'+'\t'+'\t'.join(desired))
 	count=1
-	for line in islands:
-		output.write('\n'+str(count)+'\t'+'\t'.join(line.get_ajusted()))
+	for ID in IDs:
+		output.write('\n'+str(count)+'\t'+'\t'.join(islands[islands.index(ID)].get_ajusted(desired)))
 		#if line.positif:
 		#	output_pos.write('\n'+str(count)+'\t'+'\t'.join(line.ajusted))
 		count+=1
@@ -112,10 +115,12 @@ def main():
 	islands=[ adding(desired,file) for file in args.data ]
 	accession={line.replace('\n','').split('\t')[0]:line.replace('\n','').split('\t')[1] for line in open(args.acc,'r')}
 	additional=args.add 
-	detection(desired,args.add,accession,islands)
-
-#	pickle('islandpick.pickle',GI)
-#	writing(desired,GI)	
+	add=detection(desired,args.add,accession,islands)
+	islands=islands[0]+islands[1]+add
+	IDs=set([line.ID for line in islands])
+	writing(desired,islands,IDs)
+	pickle('islandpick.pickle',islands)
+	
 
 
 if __name__ == "__main__":
