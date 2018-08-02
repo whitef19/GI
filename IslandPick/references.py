@@ -30,10 +30,10 @@ def timestamp(name):
 
 def argsparse():
 	parser=argparse.ArgumentParser(description='Parsing of genomic island database')
-	parser.add_argument('-q','--query', action='store', dest='query', help='accession,organism,start,end,reference',required=True)
-	parser.add_argument('-p','--pickle', action='store',dest='pickle',help='pickle file of genomic island',required=True)
-	parser.add_argument('-o','--output' action='store', dest='output',help='output file (default=output.out)',default='output.out')
-	parser.add_argument('-key', action='store', dest='key',help='keyword for research')
+	parser.add_argument('-q','--query', action='store', nargs='*', dest='query', help='accession,organism,start,end,reference', required=True)
+	parser.add_argument('-p','--pickle', action='store', dest='pickle', help='pickle file of genomic island', required=True)
+	parser.add_argument('-o','--output', action='store', dest='output', help='output file (default=output.out)', default='output.out')
+	parser.add_argument('-key', action='store', nargs='*', dest='key', help='keyword for research')
 	args=parser.parse_args()
 	return args
 
@@ -54,20 +54,22 @@ def writing(desired,strings,output):
 	for string in strings:
 		o.write('\n'+'echo "#'+string+'" >> '+output)
 		o.write('\n'+'esearch -db pubmed -query "'+string+'" -sort Relevance |efetch -format medline | grep -wf pattern >> '+output)
+	o.write('\n'+'echo "DONE"')
 	o.close()
 
 def main():
 	args=argsparse()
-	islands=unpicle(args.pickle)
+	islands=unpickle(args.pickle)
 	desired=['ACCESSION','ORGANISM','START','END','SEQUENCE','INSERTION','REFERENCE','DETECTION']
-	stings=[]
+	query=[q.upper() for q in args.query]
+	strings=[]
 	for island in islands:
 		line=island.get_ajusted(desired)
 		line[1]=line[1].split(',')[0]
-		string=(' '.join([line[i] for i,info in enumerate(desired)] if info in args.query))
+		string=(' '.join([line[i] for i,info in enumerate(desired) if info in query]))
 		if args.key:
 			string=string+' '+' '.join(args.key)
-		strings.append(sting)
+		strings.append(string)
 	writing(desired,strings,args.output)
 
 if __name__ == "__main__":
