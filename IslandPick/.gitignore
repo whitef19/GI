@@ -16,3 +16,5 @@ output/querier_output_references
 output/references_organism_position.out
 prediction.py
 tmp
+output/querier_output
+output/querier_output_GI
