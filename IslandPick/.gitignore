@@ -4,3 +4,10 @@ islandpick/
 accession_nb
 list_accession
 list_references
+pattern
+parsing_v1.py
+parsing_v2.py
+parsing_v3.py
+
+islandpick.pickle
+__pycache__/

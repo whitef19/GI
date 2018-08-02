@@ -11,3 +11,7 @@ esearch -db pubmed -query "Parkhill et al., 2001, Nature" -sort Relevance |efetc
 esearch -db pubmed -query "Reen et al., 2006 Nat Rev Microbiol" -sort Relevance |efetch -format medline | grep -wf pattern >>output/EDirect_references 
 
 echo "DONE"
+
+NC_009665.1 Shewanella baltica OS185 642102 650843
+
+esearch -db pubmed -query "NC_009665.1 Shewanella baltica OS185 642102 650843" -sort Relevance |efetch -format medline | grep -wf pattern >>output/EDirect_references 

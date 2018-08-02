@@ -8,7 +8,7 @@ import datetime
 import pandas as pd
 #import numpy as np
 #from math import log,exp
-#import _pickle as cpickle
+import _pickle as cpickle
 
 class Ilot:
 	def __init__(self,liste,col,desired):
@@ -39,6 +39,18 @@ class Ilot:
 
 def timestamp(name):
 	print("{0} : Timestamp: {1:%Y-%m-%d %H:%M:%S}".format(name, datetime.datetime.now()))
+
+
+def pickle(name,objects) :
+	with open(name,'wb') as file:
+		pickler = cpickle.Pickler(file)
+		pickler.dump(objects)
+
+def unpickle(name):
+	with open(name,'rb') as f:
+		pickler=cpickle.Unpickler(f)
+		objects=pickler.load()
+	return objects
 
 def reading(table,desired):
 	timestamp("READING")
@@ -111,7 +123,8 @@ def main():
 		GI=GI+data
 	
 	GI=detection(additional,accession_nb,GI,desired)
-	writing(desired,GI)
+	pickle('islandpick.pickle',GI)
+#	writing(desired,GI)
 
 
 if __name__ == "__main__":
