@@ -11,12 +11,13 @@ import optparse
 
 class Ilot:
 	def __init__(self,line,col,desired):
-		self.ID=line[col.index('ACCESSION')]+'_'+str(line[col.index('START')])+'_'+str(line[col.index('END')])
+		self.ID=line[col.index('ACCESSION')]+'-'+str(line[col.index('START')])+'-'+str(line[col.index('END')])
 		self.positif=False
 		self.line=line
 		self.col=col
 		if 'REFERENCE' in col:
 			self.positif=True 
+			
 	def get_ajusted(self,desired):
 		self.ajusted=[str(self.line[self.col.index(c)]) if c in self.col else '' for c in desired]
 		return self.ajusted
@@ -44,7 +45,7 @@ def argsparse():
 	parser.add_argument('-i', action='store', nargs='*', dest='data', metavar='file', help='xlsx files list to parse')
 	parser.add_argument('-acc', action='store', dest='acc', metavar='file', help='list of accession number with test number')
 	parser.add_argument('-add', action='store', dest='add', metavar='file', help='additional table with detection method')
-	parser.add_argument('-t', action='store')
+	parser.add_argument('-o', action='store', dest='output', help='output file database')
 	args=parser.parse_args()
 	return args
 
