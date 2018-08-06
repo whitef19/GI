@@ -11,7 +11,7 @@ import _pickle as cpickle
 class Ilot:
 	def __init__(self,line,col,desired):
 		self.col=col
-		self.ID=line[col.index('ACCESSION')]+'_'+str(line[col.index('START')])+'_'+str(line[col.index('END')])
+		self.ID=line[col.index('ACCESSION')]+'-'+str(line[col.index('START')])+'-'+str(line[col.index('END')])
 		self.line=line
 		self.positif=False
 		if 'REFERENCE' in col:
@@ -30,10 +30,12 @@ def timestamp(name):
 
 def argsparse():
 	parser=argparse.ArgumentParser(description='Parsing of genomic island database')
-	parser.add_argument('-bp','--pad', action='store', dest='pad',type=int, help='number of base pair to add', default=50)
-	parser.add_argument('-p','--pickle', action='store', dest='pickle', help='pickle file of genomic island', required=True)
-	parser.add_argument('-sh', action='store', dest='sh', help='output sh script (default=sequences.sh)', default='sequences.sh')
-#	parser.add_argument('-o','--output', action='store', dest='output', help='output prefix (default=output.out)', default='output.out')
+	parser.add_argument('-p','--pickle',action='store',     dest='pickle',help='pickle file of genomic island', required=True)
+	parser.add_argument('-sh',          action='store',     dest='sh',    help='output sh script (default=sequences.sh)', default='sequences.sh')
+	parser.add_argument('-o','--output',action='store',     dest='output',help='output prefix (default=sequence.)', default='sequence.')
+	parser.add_argument('-c','--crop',  action='store_true',dest='crop',  help='create a cropped fasta file with interval of the island')
+	parser.add_argument('-bp','--pad',  action='store',     dest='pad',   help='number of base pair to add',type=int,default=50)
+
 #	parser.add_argument('-key', action='store', nargs='*', dest='key', help='keyword for research')
 	args=parser.parse_args()
 	return args
@@ -49,30 +51,43 @@ def unpickle(name):
 		objects=pickler.load()
 	return objects
 
-def writing(desired,strings,output):
-	o=open('EDirect.sh','w') 
-	o.write('#!/bin/bash'+'\n')
-	for string in strings:
-		o.write('\n'+'echo "#'+string+'" >> '+output)
-		o.write('\n'+'esearch -db pubmed -query "'+string+'" -sort Relevance |efetch -format medline | grep -wf pattern >> '+output)
+def writing(Query,IDs,sh,output,crop):
+	o=open(sh,'w') 
+	o.write( '#!/bin/bash'+'\n' )
+	for organism in set(IDs):
+		acc=organism.split('_')[0]
+		file=output+acc+'.fasta'
+		o.write( '\n'+'\n'+'#'+acc ) # verify if genome file already exist
+		o.write('\n'+ 'if [ ! -f '+file+' ] ; then esearch -db Nucleotide -query "('+acc+')"|efetch -format fasta > '+file+' ;fi') 
 	o.write('\n'+'echo "DONE"')
 	o.close()
 
+
+	if crop: # creation of cropped fasta 
+		c=open('cropped.'+sh,'w')
+		c.write( '#!/bin/bash'+'\n' )
+		for query in Query:
+			file=output+query[0]+'.fasta'
+			c.write('\n'+ 'header=` grep ">" '+file+'`' )
+			c.write('\n'+ 'echo "$header '+query[0]+' '+query[1]+'-'+query[2]+'" >'+output+'crop.'+query[3]+'.fasta' )
+			c.write('\n'+ 'grep -v ">" '+file+" | sed ':a;N;$!ba;s/\n//g'| cut -c "+query[1]+'-'+query[2]+' >>'+output+'crop.'+query[3]+'.fasta' )
+			c.write('\n'+ 'echo "'+query[3]+' '+query[4]+'" >> error.not_found ; fi' )
+		c.write('\n'+'echo "DONE"')
+		c.close()
+			
 def main():
 	args=argsparse()
 	islands=unpickle(args.pickle)
 	desired=['ACCESSION','ORGANISM','START','END','SEQUENCE','INSERTION','REFERENCE','DETECTION']
 	Query=[]
+	IDs=[]
 	for island in islands:
 		organism=island.get_ajusted(desired)[1]
-		print(organism)
-		ID=island.ID.split('_')
-		print(ID)
-		key=[ID[0],int(float(ID[1])-args.pad),int(float(ID[2])+args.pad)]
-		print(key)
+		ID=island.ID.split('-')
+		key=[ID[0],str(int(ID[1])-args.pad),str(int(ID[2])+args.pad),island.ID,organism]
+		IDs.append(island.ID)
 		Query.append(key)
-
-	#writing(desired,strings,args.output)
+	writing(Query,IDs,args.sh,args.output,args.crop)
 
 if __name__ == "__main__":
 	timestamp("STARTING")
