@@ -4,10 +4,14 @@ import os
 import sys
 import csv
 import datetime
+import argparse
 import pandas as pd
 import _pickle as cpickle
-import argparse
-import optparse
+from bs4 import BeautifulSoup,SoupStrainer
+
+import re
+import urllib
+import requests as req
 
 class Ilot:
 	def __init__(self,line,col,desired):
@@ -43,7 +47,7 @@ def unpickle(name):
 def argsparse():
 	parser=argparse.ArgumentParser(description='Parse genomic islands databases')
 	parser.add_argument('-i', action='store', dest='data', metavar='file', help='db files list to parse',required=True)
-	parser.add_argument('-f', action='store', dest='format', metavar='file', help='format of input file(txt,xlsx)',required=True)
+	parser.add_argument('-f', action='store', dest='format', help='format of input file(txt,xlsx,html)',required=True)
 #	parser.add_argument('-acc', action='store', dest='acc', metavar='file', help='list of accession number with test number')
 #	parser.add_argument('-add', action='store', dest='add', metavar='file', help='additional table with detection method')
 #	parser.add_argument('-o', action='store', dest='output', help='output file database (default=ouput.out',default='output.out')
@@ -71,6 +75,32 @@ def txt(desired,data):
 			line=line.replace('\n','').split('\t')
 			islands.append(Ilot(line,col,desired))
 	return islands
+
+def html(desired,data):
+	file=open(data,'r')
+	table=SoupStrainer("table")
+	soup=BeautifulSoup(file,'html.parser',parse_only=table).find_all(bordercolordark='white')
+	table=[]
+	for species in soup:
+		for island in species.findAll(valign='top'):
+			cells=island.findAll('td') # list
+			if len(cells) >0:
+				link=cells[1].find('a').get('href')
+				strain=cells[2].text.strip()
+				site=cells[4].text.strip()
+				accession=cells[5].text.strip().split('(')[0]
+				end=int(float(cells[5].text.strip().split('(')[1].replace('kb','\t').split('\t')[0])*1000)
+
+				table.append(Ilot([accession,strain,'1',end,site,'PAIDB-REI',link],['ACCESSION','ORGANISM','START','END','INSERTION','DETECTION'],desired))
+				# crawling island page
+				name="page_REI_{}.html".format(str(accession))
+				payload={'m':accession}
+				resp=req.get('http://www.paidb.re.kr/'+link)
+				file=resp.text
+				with open(name,"w") as f:
+					f.write(file)
+				print("---> {} saved succesfully\n".format(name))
+	return table
 
 def adding(desired,data):
 	df=pd.read_excel(data)
@@ -127,6 +157,8 @@ def main():
 		islands=excel(desired,args.data)
 	if args.format =='txt' :
 		islands=txt(desired,args.data)
+	if args.format =='html' :
+		islands=html(desired,args.data)
 	pickle(args.pickle,islands)
 
 #	accession={line.replace('\n','').split('\t')[0]:line.replace('\n','').split('\t')[1] for line in open(args.acc,'r')}
