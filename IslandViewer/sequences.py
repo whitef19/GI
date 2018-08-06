@@ -30,7 +30,7 @@ def timestamp(name):
 
 def argsparse():
 	parser=argparse.ArgumentParser(description='Parsing of genomic island database')
-	parser.add_argument('-p','--pickle',action='store',     dest='pickle',help='pickle file of genomic island', required=True)
+	parser.add_argument('-db',          action='store',     dest='pickle',help='pickle file of genomic islands', required=True)
 	parser.add_argument('-sh',          action='store',     dest='sh',    help='output sh script (default=sequences.sh)', default='sequences.sh')
 	parser.add_argument('-o','--output',action='store',     dest='output',help='output prefix (default=sequence.)', default='sequence.')
 	parser.add_argument('-c','--crop',  action='store_true',dest='crop',  help='create a cropped fasta file with interval of the island')
@@ -55,7 +55,7 @@ def writing(Query,IDs,sh,output,crop):
 	o=open(sh,'w') 
 	o.write( '#!/bin/bash'+'\n' )
 	for organism in set(IDs):
-		acc=organism.split('_')[0]
+		acc=organism.split('-')[0]
 		file=output+acc+'.fasta'
 		o.write( '\n'+'\n'+'#'+acc ) # verify if genome file already exist
 		o.write('\n'+ 'if [ ! -f '+file+' ] ; then esearch -db Nucleotide -query "('+acc+')"|efetch -format fasta > '+file+' ;fi') 
@@ -68,10 +68,10 @@ def writing(Query,IDs,sh,output,crop):
 		c.write( '#!/bin/bash'+'\n' )
 		for query in Query:
 			file=output+query[0]+'.fasta'
-			c.write('\n'+ 'header=` grep ">" '+file+'`' )
-			c.write('\n'+ 'echo "$header '+query[0]+' '+query[1]+'-'+query[2]+'" >'+output+'crop.'+query[3]+'.fasta' )
-			c.write('\n'+ 'grep -v ">" '+file+" | sed ':a;N;$!ba;s/\n//g'| cut -c "+query[1]+'-'+query[2]+' >>'+output+'crop.'+query[3]+'.fasta' )
-			c.write('\n'+ 'echo "'+query[3]+' '+query[4]+'" >> error.not_found ; fi' )
+			o.write('\n'+ 'if [ ! -f '+output+'crop.'+query[3]+'.fasta ] ; then ') 
+			c.write('\n'+ '\t' +'header=` grep ">" '+file+'`' )
+			c.write('\n'+ '\t' +'echo "$header '+query[0]+' '+query[1]+'-'+query[2]+'" >'+output+'crop.'+query[3]+'.fasta' )
+			c.write('\n'+ '\t' +'grep -v ">" '+file+" | sed ':a;N;$!ba;s/\\n//g'| cut -c "+query[1]+'-'+query[2]+' >>'+output+'crop.'+query[3]+'.fasta ; fi' )
 		c.write('\n'+'echo "DONE"')
 		c.close()
 			
@@ -82,9 +82,8 @@ def main():
 	Query=[]
 	IDs=[]
 	for island in islands:
-		organism=island.get_ajusted(desired)[1]
 		ID=island.ID.split('-')
-		key=[ID[0],str(int(ID[1])-args.pad),str(int(ID[2])+args.pad),island.ID,organism]
+		key=[ID[0],str(int(ID[1])-args.pad),str(int(ID[2])+args.pad),island.ID]
 		IDs.append(island.ID)
 		Query.append(key)
 	writing(Query,IDs,args.sh,args.output,args.crop)
