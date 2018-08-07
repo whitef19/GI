@@ -31,7 +31,7 @@ def timestamp(name):
 def argsparse():
 	parser=argparse.ArgumentParser(description='Parsing of genomic island database')
 	parser.add_argument('-db',          action='store',     dest='pickle',help='pickle file of genomic islands', required=True)
-	parser.add_argument('-sh',          action='store',     dest='sh',    help='output sh script (default=sequences.sh)', default='get_sequences.sh')
+	parser.add_argument('-sh',          action='store',     dest='sh',    help='output sh script (default=sequences.sh)', default='sequences.sh')
 	parser.add_argument('-o','--output',action='store',     dest='output',help='output prefix (default=sequence.)', default='sequence.')
 	parser.add_argument('-c','--crop',  action='store_true',dest='crop',  help='create a cropped fasta file with interval of the island')
 	parser.add_argument('-bp','--pad',  action='store',     dest='pad',   help='number of base pair to add',type=int,default=50)
@@ -54,7 +54,7 @@ def unpickle(name):
 def writing(Query,accession,sh,output,crop):
 	o=open(sh,'w') 
 	o.write( '#!/bin/bash'+'\n' )
-	for organism in set(accession):
+	for organism in set(access):
 		acc=organism.split('-')[0]
 		file=output+acc+'.fasta'
 		o.write( '\n'+'\n'+'#'+acc ) # verify if genome file already exist

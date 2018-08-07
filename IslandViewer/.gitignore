@@ -19,3 +19,6 @@ tmp
 output/querier_output
 output/querier_output_GI
 islandpick_suptable1.pickle
+nohup.out
+get_sequences.sh
+database.pickle

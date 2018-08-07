@@ -45,6 +45,7 @@ def argsparse():
 	parser.add_argument('-i', action='store', dest='data', metavar='file', help='db files list to parse',required=True)
 	parser.add_argument('-db', action='store', dest='db', help='islandviewer,paidb,iceberg',required=True)
 	parser.add_argument('-bn', action='store', dest='pickle', help='output binary file (default=input.pickle)',default='input.pickle')
+	parser.add_argument('-acc', action='store', dest='acc', help='list of accession number and organism')
 	args=parser.parse_args()
 	return args
 
@@ -58,23 +59,30 @@ def excel(desired,data):
 	island=[Ilot(line,col,desired) for line in data_list]
 	return island
 
-def IV4(desired,data):
-	f=open(data,'r')
+def IV4(desired,data,org_dict):
+	col=['ACCESSION','ORGANISM','START','END','DETECTION']
+	f=open('table.islandViewer.out','w')
+	f.write('#'+'\t'.join(col))
+	
+	file=open(data,'r')
 	islands=[]
-	for line in f:
-		if line.startswith('#'):
-			col=[c.upper() for c in line.replace('\n','').replace('#','').split('\t')]
-		else:
+	for line in file:
+		if not line.startswith('#'):
 			line=line.replace('\n','').split('\t')
+			organism=org_dict[line[0]] if line[0] in org_dict else None
+			line=[line[0],organism]+line[1:]
+			print(line)
+			f.write('\n'+'\t'.join(line))
 			islands.append(Ilot(line,col,desired))
-	return islands
+	f.close()
+	#return islands
 
-def PAIDB(desired,data):
-#	import re
-#	import urllib
-#	import requests as req
+def PAIDB(desired,data,acc_dict):
+	import re
+	import urllib
+	import requests as req
 
-	col=['ACCESSION','ORGANISM','START','END','INSERTION','DETECTION']
+	col=['ACCESSION','ORGANISM','START','END','SEQUENCE','INSERTION','DETECTION']
 	f=open('table.PAIDB.out','w')
 	f.write('#'+'\t'.join(col))
 	file=open(data,'r')
@@ -88,13 +96,32 @@ def PAIDB(desired,data):
 				link=cells[1].find('a').get('href')
 				strain=cells[2].text.strip()
 				site=cells[4].text.strip()
-				accession=cells[5].text.strip().split('(')[0]
+				locus=cells[5].text.strip().split('(')[0].replace(' ','')
 				end=int(float(cells[5].text.strip().split('(')[1].replace('kb','\t').split('\t')[0])*1000)
-				line=[accession,strain,'1',str(end),site,'PAIDB-REI',link]
-				islands.append(Ilot(line,col,desired))
+
+				organism=' '.join(strain.split(' ')[:2])
+				if organism in acc_dict:
+					accession=acc_dict[organism]
+
+				resp=req.get('http://www.paidb.re.kr/'+link) # crawling island page
+				file=resp.text
+				soup=BeautifulSoup(file,'html.parser').select('table') #.findAll('b')
+				reference=[]
+				for i,row in enumerate(soup):
+					if str(i)=='1':
+						section=row.findAll('td')
+						publication=section[0].text.strip().split('.')
+						for pub in publication:
+							pub=pub.split(' ')
+							if 'PUBMED' in pub :
+								reference.append('PMID:'+str(pub[pub.index('PUBMED')+1]))
+
+				line=[accession,strain,'1',str(end),locus,site,'PAIDB-REI',','.join(reference)]
+				
+				#islands.append(Ilot(line,col,desired))
 				f.write('\n'+'\t'.join(line))
 	f.close()
-	return islands		
+#	return islands		
 	"""
 				name="page_REI_{}.html".format(str(accession)) # crawling island page
 				payload={'m':accession}
@@ -105,13 +132,15 @@ def PAIDB(desired,data):
 				print("---> {} saved succesfully\n".format(name)
 				"""
 
-def ICEberg(desired,data):
+def ICEberg(desired,data,acc_dict):
 	islands=[]
+	col=['ACCESSION','ORGANISM','START','END','SEQUENCE','INSERTION','REFERENCE','DETECTION']
+	columns=['accession','Organism','Genome coordinates','Nucleotide Sequence','Insertion site','detection']
+	f=open('table.ICEberg.out','w')
+	f.write('#'+'\t'.join(col))
 	for page in range(1,467): # nombre de page 
 		info={}
 		reference=[]
-		col=['ACCESSION','ORGANISM','START','END','INSERTION','REFERENCE','DETECTION']
-		columns=['Organism','Insertion site','Nucleotide Sequence','Genome coordinates','detection']
 		file=open(data+'page_'+str(page)+'.html','r')
 		soup=BeautifulSoup(file,'html.parser').findAll('tr')
 		for row in soup:
@@ -124,18 +153,23 @@ def ICEberg(desired,data):
 				elif cells[0].text.strip().startswith('(') :
 					reference.append(cells[0].text.strip().split('[')[1].replace(']',''))
 		info['reference']=','.join(reference)
+		organism=' '.join(info['Organism'].split(' ')[:2]) if 'Organism' in info else None
+		if organism in acc_dict:
+			info['accession']=acc_dict[organism]
 		for column in columns :
 			if column not in info:
 				info[column]='- ..-'
-		line=[info['Nucleotide Sequence'].split(' ')[0].split(';')[0],info['Organism'],info['Genome coordinates'].split('..')[0],info['Genome coordinates'].split('..')[1],info['Insertion site'], info['reference'],info['detection']]
+		line=[info['accession'],info['Organism'],info['Genome coordinates'].split('..')[0],info['Genome coordinates'].split('..')[1],info['Nucleotide Sequence'],info['Insertion site'], info['reference'],info['detection']]
+		f.write('\n'+'\t'.join(line))
+		"""
+		for column in columns :
+			if column not in info:
+				info[column]='- ..-'
+		line=[info['Organism'],info['Genome coordinates'].split('..')[0],info['Genome coordinates'].split('..')[1],info['Nucleotide Sequence'],info['Insertion site'], info['reference'],info['detection']]
 		islands.append(Ilot(line,col,desired))
-
-	f=open('table.ICEberg.out','w')
-	f.write('#'+'\t'.join(col))
-	for island in islands:
-		f.write('\n'+'\t'.join(island.line))
+		"""
 	f.close()
-	return islands
+#	return islands
 
 def adding(desired,data):
 	df=pd.read_excel(data)
@@ -188,14 +222,24 @@ def main():
 	desired=['ACCESSION','ORGANISM','START','END','SEQUENCE','INSERTION','REFERENCE','DETECTION']
 	args=argsparse()
 
+	
 	if args.db.lower() =='xlsx':
 		islands=excel(desired,args.data)
 	if args.db.lower() =='islandviewer' :
-		islands=IV4(desired,args.data)
+		organisms={}
+		for nb in open(args.acc,'r'):
+			organisms[nb.replace('\n','').split('\t')[0]]=nb.replace('\n','').split('\t')[1]
+		islands=IV4(desired,args.data,organisms)
 	if args.db.lower() =='paidb' :
-		islands=PAIDB(desired,args.data)
+		accession_nb={}
+		for nb in open(args.acc,'r'):
+			accession_nb[nb.replace('\n','').split('\t')[1]]=nb.replace('\n','').split('\t')[0]
+		islands=PAIDB(desired,args.data,accession_nb)
 	if args.db.lower() =='iceberg' :
-		islands=ICEberg(desired,args.data)
+		accession_nb={}
+		for nb in open(args.acc,'r'):
+			accession_nb[nb.replace('\n','').split('\t')[1]]=nb.replace('\n','').split('\t')[0]
+		islands=ICEberg(desired,args.data,accession_nb)
 	
 #	pickle(args.pickle,islands)
 
