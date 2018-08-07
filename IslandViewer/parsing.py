@@ -9,10 +9,6 @@ import pandas as pd
 import _pickle as cpickle
 from bs4 import BeautifulSoup,SoupStrainer
 
-import re
-import urllib
-import requests as req
-
 class Ilot:
 	def __init__(self,line,col,desired):
 		self.ID=line[col.index('ACCESSION')]+'-'+str(line[col.index('START')])+'-'+str(line[col.index('END')])
@@ -47,10 +43,7 @@ def unpickle(name):
 def argsparse():
 	parser=argparse.ArgumentParser(description='Parse genomic islands databases')
 	parser.add_argument('-i', action='store', dest='data', metavar='file', help='db files list to parse',required=True)
-	parser.add_argument('-f', action='store', dest='format', help='format of input file(txt,xlsx,html)',required=True)
-#	parser.add_argument('-acc', action='store', dest='acc', metavar='file', help='list of accession number with test number')
-#	parser.add_argument('-add', action='store', dest='add', metavar='file', help='additional table with detection method')
-#	parser.add_argument('-o', action='store', dest='output', help='output file database (default=ouput.out',default='output.out')
+	parser.add_argument('-db', action='store', dest='db', help='islandviewer,paidb,iceberg',required=True)
 	parser.add_argument('-bn', action='store', dest='pickle', help='output binary file (default=input.pickle)',default='input.pickle')
 	args=parser.parse_args()
 	return args
@@ -65,7 +58,7 @@ def excel(desired,data):
 	island=[Ilot(line,col,desired) for line in data_list]
 	return island
 
-def txt(desired,data):
+def IV4(desired,data):
 	f=open(data,'r')
 	islands=[]
 	for line in f:
@@ -76,11 +69,18 @@ def txt(desired,data):
 			islands.append(Ilot(line,col,desired))
 	return islands
 
-def html(desired,data):
+def PAIDB(desired,data):
+#	import re
+#	import urllib
+#	import requests as req
+
+	col=['ACCESSION','ORGANISM','START','END','INSERTION','DETECTION']
+	f=open('table.PAIDB.out','w')
+	f.write('#'+'\t'.join(col))
 	file=open(data,'r')
 	table=SoupStrainer("table")
 	soup=BeautifulSoup(file,'html.parser',parse_only=table).find_all(bordercolordark='white')
-	table=[]
+	islands=[]
 	for species in soup:
 		for island in species.findAll(valign='top'):
 			cells=island.findAll('td') # list
@@ -90,17 +90,52 @@ def html(desired,data):
 				site=cells[4].text.strip()
 				accession=cells[5].text.strip().split('(')[0]
 				end=int(float(cells[5].text.strip().split('(')[1].replace('kb','\t').split('\t')[0])*1000)
-
-				table.append(Ilot([accession,strain,'1',end,site,'PAIDB-REI',link],['ACCESSION','ORGANISM','START','END','INSERTION','DETECTION'],desired))
-				# crawling island page
-				name="page_REI_{}.html".format(str(accession))
+				line=[accession,strain,'1',str(end),site,'PAIDB-REI',link]
+				islands.append(Ilot(line,col,desired))
+				f.write('\n'+'\t'.join(line))
+	f.close()
+	return islands		
+	"""
+				name="page_REI_{}.html".format(str(accession)) # crawling island page
 				payload={'m':accession}
 				resp=req.get('http://www.paidb.re.kr/'+link)
 				file=resp.text
 				with open(name,"w") as f:
 					f.write(file)
-				print("---> {} saved succesfully\n".format(name))
-	return table
+				print("---> {} saved succesfully\n".format(name)
+				"""
+
+def ICEberg(desired,data):
+	islands=[]
+	for page in range(1,467): # nombre de page 
+		info={}
+		reference=[]
+		col=['ACCESSION','ORGANISM','START','END','INSERTION','REFERENCE','DETECTION']
+		columns=['Organism','Insertion site','Nucleotide Sequence','Genome coordinates','detection']
+		file=open(data+'page_'+str(page)+'.html','r')
+		soup=BeautifulSoup(file,'html.parser').findAll('tr')
+		for row in soup:
+			cells=row.findAll('td')
+			if len(cells)>0 :
+				if cells[0].text.strip() in columns:
+					info[cells[0].text.strip()]=cells[1].text.strip()
+				elif cells[0].text.strip().startswith('This is a') :
+					info['detection']=cells[0].text.strip()
+				elif cells[0].text.strip().startswith('(') :
+					reference.append(cells[0].text.strip().split('[')[1].replace(']',''))
+		info['reference']=','.join(reference)
+		for column in columns :
+			if column not in info:
+				info[column]='- ..-'
+		line=[info['Nucleotide Sequence'].split(' ')[0].split(';')[0],info['Organism'],info['Genome coordinates'].split('..')[0],info['Genome coordinates'].split('..')[1],info['Insertion site'], info['reference'],info['detection']]
+		islands.append(Ilot(line,col,desired))
+
+	f=open('table.ICEberg.out','w')
+	f.write('#'+'\t'.join(col))
+	for island in islands:
+		f.write('\n'+'\t'.join(island.line))
+	f.close()
+	return islands
 
 def adding(desired,data):
 	df=pd.read_excel(data)
@@ -153,20 +188,22 @@ def main():
 	desired=['ACCESSION','ORGANISM','START','END','SEQUENCE','INSERTION','REFERENCE','DETECTION']
 	args=argsparse()
 
-	if args.format =='xlsx':
+	if args.db.lower() =='xlsx':
 		islands=excel(desired,args.data)
-	if args.format =='txt' :
-		islands=txt(desired,args.data)
-	if args.format =='html' :
-		islands=html(desired,args.data)
-	pickle(args.pickle,islands)
+	if args.db.lower() =='islandviewer' :
+		islands=IV4(desired,args.data)
+	if args.db.lower() =='paidb' :
+		islands=PAIDB(desired,args.data)
+	if args.db.lower() =='iceberg' :
+		islands=ICEberg(desired,args.data)
+	
+#	pickle(args.pickle,islands)
 
 #	accession={line.replace('\n','').split('\t')[0]:line.replace('\n','').split('\t')[1] for line in open(args.acc,'r')}
 #	additional=args.add 
 #	islands+=detection(desired,args.add,accession,islands)
 #	IDs=set([line.ID for line in islands])
 #	writing(desired,islands,IDs,args.output)
-	pickle(args.pickle,islands)
 	
 if __name__ == "__main__":
 	timestamp("STARTING")
