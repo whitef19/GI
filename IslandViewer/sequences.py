@@ -31,7 +31,7 @@ def timestamp(name):
 def argsparse():
 	parser=argparse.ArgumentParser(description='Parsing of genomic island database')
 	parser.add_argument('-db',          action='store',     dest='pickle',help='pickle file of genomic islands', required=True)
-	parser.add_argument('-sh',          action='store',     dest='sh',    help='output sh script (default=sequences.sh)', default='sequences.sh')
+	parser.add_argument('-sh',          action='store',     dest='sh',    help='output sh script (default=sequences.sh)', default='get_sequences.sh')
 	parser.add_argument('-o','--output',action='store',     dest='output',help='output prefix (default=sequence.)', default='sequence.')
 	parser.add_argument('-c','--crop',  action='store_true',dest='crop',  help='create a cropped fasta file with interval of the island')
 	parser.add_argument('-bp','--pad',  action='store',     dest='pad',   help='number of base pair to add',type=int,default=50)
@@ -51,10 +51,10 @@ def unpickle(name):
 		objects=pickler.load()
 	return objects
 
-def writing(Query,IDs,sh,output,crop):
+def writing(Query,accession,sh,output,crop):
 	o=open(sh,'w') 
 	o.write( '#!/bin/bash'+'\n' )
-	for organism in set(IDs):
+	for organism in set(accession):
 		acc=organism.split('-')[0]
 		file=output+acc+'.fasta'
 		o.write( '\n'+'\n'+'#'+acc ) # verify if genome file already exist
@@ -80,13 +80,13 @@ def main():
 	islands=unpickle(args.pickle)
 	desired=['ACCESSION','ORGANISM','START','END','SEQUENCE','INSERTION','REFERENCE','DETECTION']
 	Query=[]
-	IDs=[]
+	accession=[]
 	for island in islands:
 		ID=island.ID.split('-')
 		key=[ID[0],str(int(ID[1])-args.pad),str(int(ID[2])+args.pad),island.ID]
-		IDs.append(island.ID)
+		accession.append(ID[0])
 		Query.append(key)
-	writing(Query,IDs,args.sh,args.output,args.crop)
+	writing(Query,accession,args.sh,args.output,args.crop)
 
 if __name__ == "__main__":
 	timestamp("STARTING")
