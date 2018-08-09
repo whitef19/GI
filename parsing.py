@@ -17,10 +17,12 @@ class Ilot:
 		self.col=col
 		if 'REFERENCE' in col:
 			self.positif=True 
+		self.info=[]
 			
 	def get_ajusted(self,desired):
 		self.ajusted=[str(self.line[self.col.index(c)]) if c in self.col else '' for c in desired]
 		return self.ajusted
+
 	def __eq__ (self, other):
 		return self.ID==other.ID
 	def __eq__ (self, ID):
@@ -61,7 +63,7 @@ def excel(desired,data):
 
 def IV4(desired,data,org_dict):
 	col=['ACCESSION','ORGANISM','START','END','DETECTION']
-	f=open('table.islandViewer.out','w')
+	f=open('table.iv4.out','w')
 	f.write('#'+'\t'.join(col))
 	
 	file=open(data,'r')
@@ -97,7 +99,7 @@ def PAIDB(desired,data,acc_dict):
 				strain=cells[2].text.strip()
 				site=cells[4].text.strip()
 				locus=cells[5].text.strip().split('(')[0].replace(' ','')
-				end=int(float(cells[5].text.strip().split('(')[1].replace('kb','\t').split('\t')[0])*1000)
+				end=int(float(cells[5].text.strip().split('(')[1].split('kb')[0])*1000)
 
 				organism=' '.join(strain.split(' ')[:2])
 				if organism in acc_dict:
@@ -117,20 +119,13 @@ def PAIDB(desired,data,acc_dict):
 								reference.append('PMID:'+str(pub[pub.index('PUBMED')+1]))
 
 				line=[accession,strain,'1',str(end),locus,site,'PAIDB-REI',','.join(reference)]
-				
+
 				#islands.append(Ilot(line,col,desired))
+
+
 				f.write('\n'+'\t'.join(line))
 	f.close()
 #	return islands		
-	"""
-				name="page_REI_{}.html".format(str(accession)) # crawling island page
-				payload={'m':accession}
-				resp=req.get('http://www.paidb.re.kr/'+link)
-				file=resp.text
-				with open(name,"w") as f:
-					f.write(file)
-				print("---> {} saved succesfully\n".format(name)
-				"""
 
 def ICEberg(desired,data,acc_dict):
 	islands=[]
@@ -170,6 +165,88 @@ def ICEberg(desired,data,acc_dict):
 		"""
 	f.close()
 #	return islands
+
+def Islander(desired,data,org_dict):
+
+	islands=[]
+	values=[]
+	tables=['`accessions`','`smpb`']
+
+	file=open(data,'r')
+	for line in file:
+		line=line.replace('\n','').split(' ')
+		if 'INSERT' in line:
+			if line[2] in tables:
+				values.append(line[4].replace('),',')|').replace('(','').replace('\'','').replace(')','').split('|'))
+	values= [values[0],(values[1]+values[2]+values[3])]
+
+	# section smpb
+	col=['ACCESSION','START','END','SEQUENCE']
+	for line in values[1]:
+		line=line.split(',')
+		info=[line[0],str(line[1]),str(line[2]),line[5]]
+		ID=info[0]+'-'+info[1]+'-'+info[2]
+		if ID not in islands :
+			islands.append(Ilot(info,col,desired))
+
+	# section accessions
+	col=['ACCESSION','START','END']
+	for line in values[0]:
+		line=line.split(',')
+		info=[line[1],line[2].split('-')[0],line[2].split('-')[1]]
+		ID='-'.join(info)
+		if ID not in islands :
+			islands.append(Ilot(info,col,desired))
+
+	#writing
+	f=open('table.islander.out','w')
+	f.write('#'+'\t'.join(['ACCESSION','ORGANISM','START','END','SEQUENCE']))
+	for island in islands:
+		organism=org_dict[island.line[0]] if island.line[0] in org_dict else ''
+		f.write('\n'+island.line[0]+'\t'+organism+'\t'+'\t'.join(island.line[1:]))
+	f.close()
+
+
+
+def main():
+	desired=['ACCESSION','ORGANISM','START','END','SEQUENCE','INSERTION','REFERENCE','DETECTION']
+	args=argsparse()
+
+	
+	if args.db.lower() =='xlsx':
+		islands=excel(desired,args.data)
+	if args.db.lower() =='islandviewer' :
+		organisms={}
+		for nb in open(args.acc,'r'):
+			organisms[nb.replace('\n','').split('\t')[0]]=nb.replace('\n','').split('\t')[1]
+		islands=IV4(desired,args.data,organisms)
+	if args.db.lower() =='paidb' :
+		accession_nb={}
+		for nb in open(args.acc,'r'):
+			accession_nb[nb.replace('\n','').split('\t')[1]]=nb.replace('\n','').split('\t')[0]
+		islands=PAIDB(desired,args.data,accession_nb)
+	if args.db.lower() =='iceberg' :
+		accession_nb={}
+		for nb in open(args.acc,'r'):
+			accession_nb[nb.replace('\n','').split('\t')[1]]=nb.replace('\n','').split('\t')[0]
+		islands=ICEberg(desired,args.data,accession_nb)
+
+	if args.db.lower() =='islander' :
+		organisms={}
+		for nb in open(args.acc,'r'):
+			organisms[nb.replace('\n','').split('\t')[0]]=nb.replace('\n','').split('\t')[1]
+		islands=Islander(desired,args.data,organisms)
+	
+#	pickle(args.pickle,islands)
+
+
+	
+if __name__ == "__main__":
+	timestamp("STARTING")
+	main()
+	timestamp("DONE")
+
+"""
 
 def adding(desired,data):
 	df=pd.read_excel(data)
@@ -218,38 +295,10 @@ def writing(desired,islands,IDs,ouput):
 	#o_pos.close()
 	#my_file = Path("/path/to/file")
 	#if my_file.is_file():
-def main():
-	desired=['ACCESSION','ORGANISM','START','END','SEQUENCE','INSERTION','REFERENCE','DETECTION']
-	args=argsparse()
 
-	
-	if args.db.lower() =='xlsx':
-		islands=excel(desired,args.data)
-	if args.db.lower() =='islandviewer' :
-		organisms={}
-		for nb in open(args.acc,'r'):
-			organisms[nb.replace('\n','').split('\t')[0]]=nb.replace('\n','').split('\t')[1]
-		islands=IV4(desired,args.data,organisms)
-	if args.db.lower() =='paidb' :
-		accession_nb={}
-		for nb in open(args.acc,'r'):
-			accession_nb[nb.replace('\n','').split('\t')[1]]=nb.replace('\n','').split('\t')[0]
-		islands=PAIDB(desired,args.data,accession_nb)
-	if args.db.lower() =='iceberg' :
-		accession_nb={}
-		for nb in open(args.acc,'r'):
-			accession_nb[nb.replace('\n','').split('\t')[1]]=nb.replace('\n','').split('\t')[0]
-		islands=ICEberg(desired,args.data,accession_nb)
-	
-#	pickle(args.pickle,islands)
-
+"""
 #	accession={line.replace('\n','').split('\t')[0]:line.replace('\n','').split('\t')[1] for line in open(args.acc,'r')}
 #	additional=args.add 
 #	islands+=detection(desired,args.add,accession,islands)
 #	IDs=set([line.ID for line in islands])
 #	writing(desired,islands,IDs,args.output)
-	
-if __name__ == "__main__":
-	timestamp("STARTING")
-	main()
-	timestamp("DONE")
