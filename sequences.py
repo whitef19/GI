@@ -30,7 +30,7 @@ def timestamp(name):
 
 def argsparse():
 	parser=argparse.ArgumentParser(description='Parsing of genomic island database')
-	parser.add_argument('-db',          action='store',     dest='pickle',help='pickle file of genomic islands', required=True)
+	parser.add_argument('-i',           action='store',     dest='input', help='input file with ', required=True)
 	parser.add_argument('-sh',          action='store',     dest='sh',    help='output sh script (default=sequences.sh)', default='sequences.sh')
 	parser.add_argument('-o','--output',action='store',     dest='output',help='output prefix (default=sequence.)', default='sequence.')
 	parser.add_argument('-c','--crop',  action='store_true',dest='crop',  help='create a cropped fasta file with interval of the island')
