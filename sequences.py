@@ -30,7 +30,7 @@ def timestamp(name):
 
 def argsparse():
 	parser=argparse.ArgumentParser(description='Parsing of genomic island database')
-	parser.add_argument('-i',           action='store',     dest='input', help='input file with ', required=True)
+	parser.add_argument('-i',           action='store',     dest='input', help='input file', required=True)
 	parser.add_argument('-sh',          action='store',     dest='sh',    help='output sh script (default=sequences.sh)', default='sequences.sh')
 	parser.add_argument('-o','--output',action='store',     dest='output',help='output prefix (default=sequence.)', default='sequence.')
 	parser.add_argument('-c','--crop',  action='store_true',dest='crop',  help='create a cropped fasta file with interval of the island')
@@ -51,42 +51,39 @@ def unpickle(name):
 		objects=pickler.load()
 	return objects
 
-def writing(Query,accession,sh,output,crop):
-	o=open(sh,'w') 
+def reading(file):
+	query=[]
+	with open(file,'r') as f:
+		for line in f:
+			if not line.startswith('#'):
+				line=line.replace('\n','').split('\t')
+				query.append([line[0],line[2],line[3]])
+	return query
+			
+def writing(query):
+	o=open('get_sequences.sh','w') 
 	o.write( '#!/bin/bash'+'\n' )
-	for organism in set(access):
-		acc=organism.split('-')[0]
-		file=output+acc+'.fasta'
-		o.write( '\n'+'\n'+'#'+acc ) # verify if genome file already exist
-		o.write('\n'+ 'if [ ! -f '+file+' ] ; then esearch -db Nucleotide -query "('+acc+')"|efetch -format fasta > '+file+' ;fi') 
+	for island in query:
+		if island[1]!='1':
+			ID='-'.join(island)
+			genome='genomes/sequence.'+island[0]+'.fasta'
+			output='sequences/island.'+ID+'.fa'
+			interval=str(int(island[1])-50)+'-'+str(int(island[2])+50)
+			o.write('\n'+ 'if [ ! -f '+genome+' ] ; then') 
+			o.write('\n'+'\t'+'echo "'+ID+'" >> no_fasta.out')
+			o.write('\n'+'else')
+			o.write('\n'+ '\t' +'header=` grep ">" '+genome+'`' )
+			o.write('\n'+ '\t' +'echo "$header '+island[0]+' '+interval+'" > '+output)
+			o.write('\n'+ '\t' +'grep -v ">" '+genome+" | sed ':a;N;$!ba;s/\\n//g'| cut -c "+interval+' >> '+output)
+			o.write('\n'+'fi'+'\n')
 	o.write('\n'+'echo "DONE"')
 	o.close()
 
-
-	if crop: # creation of cropped fasta 
-		c=open('cropped.'+sh,'w')
-		c.write( '#!/bin/bash'+'\n' )
-		for query in Query:
-			file=output+query[0]+'.fasta'
-			o.write('\n'+ 'if [ ! -f '+output+'crop.'+query[3]+'.fasta ] ; then ') 
-			c.write('\n'+ '\t' +'header=` grep ">" '+file+'`' )
-			c.write('\n'+ '\t' +'echo "$header '+query[0]+' '+query[1]+'-'+query[2]+'" >'+output+'crop.'+query[3]+'.fasta' )
-			c.write('\n'+ '\t' +'grep -v ">" '+file+" | sed ':a;N;$!ba;s/\\n//g'| cut -c "+query[1]+'-'+query[2]+' >>'+output+'crop.'+query[3]+'.fasta ; fi' )
-		c.write('\n'+'echo "DONE"')
-		c.close()
-			
 def main():
 	args=argsparse()
-	islands=unpickle(args.pickle)
-	desired=['ACCESSION','ORGANISM','START','END','SEQUENCE','INSERTION','REFERENCE','DETECTION']
-	Query=[]
-	accession=[]
-	for island in islands:
-		ID=island.ID.split('-')
-		key=[ID[0],str(int(ID[1])-args.pad),str(int(ID[2])+args.pad),island.ID]
-		accession.append(ID[0])
-		Query.append(key)
-	writing(Query,accession,args.sh,args.output,args.crop)
+	database=args.input
+	query=reading(database)
+	writing(query)
 
 if __name__ == "__main__":
 	timestamp("STARTING")

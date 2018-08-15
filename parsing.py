@@ -24,7 +24,7 @@ def unpickle(name):
 	return objects
 
 def writing(desired,data,columns,source):
-	f=open('table.'+source+'.out','w')
+	f=open('table.'+source+'.txt','w')
 	f.write('#'+'\t'.join(desired))
 	for line in data:
 		ajusted=[str(line[columns.index(c)]) if c in columns else '' for c in desired]
@@ -40,15 +40,39 @@ def argsparse():
 	args=parser.parse_args()
 	return args
 
-def excel(desired,data):
-	df=pd.read_excel(data)
-	columns=[c.upper() for c in df.columns] # upper case columns name
-	df.columns=columns	#replace columns name for the upper one
-	col=[c for c in desired if c in columns]
-	df=df[col] # cut desired columns
-	data_list=df.values.tolist()
-	island=[Ilot(line,col,desired) for line in data_list]
-	return island
+def sequences(islands):
+	Islands=[]
+	errors=[]
+	for island in islands:
+		island=
+				ID=island[0]+'-'+island[2]+'-'+island[3]
+
+				header=[]
+				error_fasta=False
+				if os.path.isfile('sequences/island.'+ID+'.fa'):
+					with open('sequences/island.'+ID+'.fa','r') as f:
+						for line in f:
+							if line.startswith('>') :
+								header.append(line.replace('\n',''))
+								if len(header)!=1:
+									errors.append(ID)
+									error_fasta=True
+
+							elif (not error_fasta) and (island[2]!='1'): 
+								if island[7]=='':
+									island[7]=line.replace('\n','')
+									Islands.append(island)
+							else: 
+								Islands.append(island)
+				else:
+					Islands.append(island)
+					if island[7]!='':
+						o=open('sequences/island.'+ID+'.fa','w')
+						o.write('>'+island[0]+' '+island[1]+' db:'+island[5]+' '+ID)
+						o.write('\n'+island[7])
+						o.close()
+
+	return Islands,errors
 
 def IV4(desired,data,org_dict):
 	islands=[]
@@ -105,7 +129,7 @@ def PAIDB(desired,data,acc_dict):
 def ICEberg(desired,data,acc_dict):
 	islands=[]
 	query=[]
-	for page in range(1,467): # nombre de page 
+	for page in range(1,467): # nombre de page
 		line=[ '' for i in desired]
 		line[5]='ICEberg'
 		reference=[]
@@ -141,7 +165,7 @@ def ICEberg(desired,data,acc_dict):
 	eDirect.write('#!/bin/bash'+'\n' )
 	for sequence in query:
 		if sequence != '-':
-			eDirect.write('\n'+'esearch -db nucleotide -query "'+sequence+'" | efetch -format fasta > sequences/island.'+sequence+'.fa') 
+			eDirect.write('\n'+'esearch -db nucleotide -query "'+sequence+'" | efetch -format fasta > sequences/island.'+sequence+'.fa')
 	eDirect.close()
 
 def Islander(desired,data):
@@ -179,8 +203,8 @@ def Islander(desired,data):
 		else:
 			islands.append([line[23],' '.join(line[24].split('_')),line[7],line[8],'islander','',''])
 
-	# islander 
-	for line in values[1]: 
+	# islander
+	for line in values[1]:
 		line=line.replace('(','').replace('\'','').split(',')
 		for i,ind in enumerate(line):
 			if ind.startswith('NC_'):
@@ -198,11 +222,11 @@ def Islander(desired,data):
 
 	writing(desired,islands,columns,'Islander')
 
+
 def main():
 	desired=['ACCESSION','ORGANISM','START','END','INSERTION','DETECTION','REFERENCE','SEQUENCE']
 	args=argsparse()
 
-	
 	if args.db.lower() =='xlsx':
 		excel(desired,args.data)
 	if args.db.lower() =='iv' :
@@ -223,13 +247,25 @@ def main():
 
 	if args.db.lower() =='islander' :
 		Islander(desired,args.data)
-	
+
 if __name__ == "__main__":
 	timestamp("STARTING")
 	main()
 	timestamp("DONE")
 
 """
+
+def excel(desired,data):
+	df=pd.read_excel(data)
+	columns=[c.upper() for c in df.columns] # upper case columns name
+	df.columns=columns	#replace columns name for the upper one
+	col=[c for c in desired if c in columns]
+	df=df[col] # cut desired columns
+	data_list=df.values.tolist()
+	island=[Ilot(line,col,desired) for line in data_list]
+	return island
+
+
 class Ilot:
 	def __init__(self,line,col,desired):
 		self.ID=line[col.index('ACCESSION')]+'-'+str(line[col.index('START')])+'-'+str(line[col.index('END')])
@@ -237,9 +273,9 @@ class Ilot:
 		self.line=line
 		self.col=col
 		if 'REFERENCE' in col:
-			self.positif=True 
+			self.positif=True
 		self.info=[]
-			
+
 	def get_ajusted(self,desired):
 		self.ajusted=[str(self.line[self.col.index(c)]) if c in self.col else '' for c in desired]
 		return self.ajusted
@@ -268,11 +304,11 @@ def adding(desired,data):
 def detection(desired,data,accession,islands):
 	add=[]
 	df=pd.read_excel(data,index_col=0,header=2,usecols=[0,1,2,5,9,11,13,15,17,19])
-	df=df.filter(like='landp',axis=0) 
-	df=df.reset_index()	
+	df=df.filter(like='landp',axis=0)
+	df=df.reset_index()
 	columns=[col.replace(' (%)','') for col in df.columns[3:]]
 	columns[0]='islandpick'
-	detection=df.values.tolist() 
+	detection=df.values.tolist()
 	for line in detection:
 		line[0]=accession[str(line[0].replace('islandpick_','').split('_')[0])]
 		line=[line[0], int(line[1]), int(line[2]),';'.join((columns[p]+'='+str(pour)) for p,pour in enumerate(line[3:]))]
@@ -305,7 +341,7 @@ def writing(desired,islands,IDs,ouput):
 
 """
 #	accession={line.replace('\n','').split('\t')[0]:line.replace('\n','').split('\t')[1] for line in open(args.acc,'r')}
-#	additional=args.add 
+#	additional=args.add
 #	islands+=detection(desired,args.add,accession,islands)
 #	IDs=set([line.ID for line in islands])
 #	writing(desired,islands,IDs,args.output)

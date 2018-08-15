@@ -8,24 +8,7 @@ import argparse
 import pandas as pd
 import _pickle as cpickle
 from pathlib import Path
-
-
-class Ilot:
-	def __init__(self,line,col,desired):
-		self.ID=line[col.index('ACCESSION')]+'-'+str(line[col.index('START')])+'-'+str(line[col.index('END')])
-		self.positif=False
-		self.line=line
-		self.col=col
-		if 'REFERENCE' in col:
-			self.positif=True 
-			
-	def get_ajusted(self,desired):
-		self.ajusted=[str(self.line[self.col.index(c)]) if c in self.col else '' for c in desired]
-		return self.ajusted
-	def __eq__ (self, other):
-		return self.ID==other.ID
-	def __eq__ (self, ID):
-		return self.ID==ID
+import numpy as np
 
 def timestamp(name):
 	print("{0} : Timestamp: {1:%Y-%m-%d %H:%M:%S}".format(name, datetime.datetime.now()))
@@ -43,75 +26,94 @@ def unpickle(name):
 
 def argsparse():
 	parser=argparse.ArgumentParser(description='Parse genomic islands databases')
-	parser.add_argument('-i', action='store', dest='data', metavar='file', help='input to add',required=True)
-	parser.add_argument('-db', action='store', dest='db', metavar='file', help='database file ',required=True)
-	parser.add_argument('-new', action='store_true', dest='new', help='if first input ')
-#	parser.add_argument('-acc', action='store', dest='acc', metavar='file', help='list of accession number with test number')
-#	parser.add_argument('-add', action='store', dest='add', metavar='file', help='additional table with detection method')
-#	parser.add_argument('-b', action='store', dest='pickle', help='output binary file (default=input.pickle)',default='input.pickle')
-#	parser.add_argument('-o', action='store', dest='output', help='output file database (default=ouput.out',default='output.out')
+	parser.add_argument('-i', action='store', dest='input', metavar='file', help='file of concatenated tables',required=True)
+	parser.add_argument('-o', action='store', dest='output', help='output file database (default=database.txt)',default='database.txt')
+	parser.add_argument('-seq', action='store_true', dest='seq', help='add sequence from downloaded fasta')
 	args=parser.parse_args()
 	return args
 
-def add(data,database,desired):
-	for island in data:
-		if island.ID not in database:
-			database.append(island)
-	return database
+def uniq(file):
+	Islands=[]
+	IDs=[]
+	sources=['ICEberg','islander','PAIDB','Dimob','islandviewer','Islander','Sigi','Islandpick']
+	islands=[{} for i in sources]
+	with open (file,'r') as f:
+		for line in f:
+			if not line.startswith("#"):
+				line=line.replace('\n','').split('\t')
+				if ('' not in line[:4]) and len(line)==8:
+					source=line[5]
+					ID=line[0]+'-'+line[2]+'-'+line[3]
+					islands[sources.index(source)][ID]=(line)
+					IDs.append(ID)
+	for ID in list(set(IDs)):
+		table=[source[ID] for source in islands if ID in source]
+		if len(table)>1:
+			colums=[(list(set([row[i] for row in table]))) for i in range(8) ]
+			line=[col[0] if idx!=5 else ','.join(col) for idx,col in enumerate(colums)]
+			Islands.append(line)
+		else: 
+			Islands.append(table[0])
+	return Islands
 
-def detection(desired,data,accession,islands):
-	add=[]
-	df=pd.read_excel(data,index_col=0,header=2,usecols=[0,1,2,5,9,11,13,15,17,19])
-	df=df.filter(like='landp',axis=0) 
-	df=df.reset_index()	
-	columns=[col.replace(' (%)','') for col in df.columns[3:]]
-	columns[0]='islandpick'
-	detection=df.values.tolist() 
-	for line in detection:
-		line[0]=accession[str(line[0].replace('islandpick_','').split('_')[0])]
-		line=[line[0], int(line[1]), int(line[2]),';'.join((columns[p]+'='+str(pour)) for p,pour in enumerate(line[3:]))]
-		ID=line[0]+'_'+str(int(line[1]))+'_'+str(int(line[2]))
-		if ID in islands:
-			islands[islands.index(ID)].col.append('DETECTION')
-			islands[islands.index(ID)].line.append('islanpick')
-		else:
-			line=Ilot(line,['ACCESSION','START','END','DETECTION'],desired)
-			add.append(line)
-	return add
+def sequences(file):
+	Islands=[]
+	errors=[]
+	with open (file,'r') as f:
+		for island in f:
+			if not island.startswith("#"):
+				island=island.replace('\n','').split('\t')
+				ID=island[0]+'-'+island[2]+'-'+island[3]
 
-def writing(desired,islands,IDs,ouput):
-	timestamp("WRITING")
-	o=open(ouput,'w') # output file
-	#o_pos=open('output.pos.out','w') # output file
-	o.write('#ID'+'\t'+'\t'.join(desired))
-	#o_pos.write('#ID'+'\t'+'\t'.join(desired))
-	count=1
-	for ID in IDs:
-		o.write('\n'+str(count)+'\t'+'\t'.join(islands[islands.index(ID)].get_ajusted(desired)))
-		#if line.positif:
-		#	o_pos.write('\n'+str(count)+'\t'+'\t'.join(line.ajusted))
-		count+=1
-	o.close()
-	#o_pos.close()
+				header=[]
+				error_fasta=False
+				if os.path.isfile('sequences/island.'+ID+'.fa'):
+					with open('sequences/island.'+ID+'.fa','r') as f:
+						for line in f:
+							if line.startswith('>') :
+								header.append(line.replace('\n',''))
+								if len(header)!=1:
+									errors.append(ID)
+									error_fasta=True
 
+							elif (not error_fasta) and (island[2]!='1'): 
+								if island[7]=='':
+									island[7]=line.replace('\n','')
+									Islands.append(island)
+							else: 
+								Islands.append(island)
+				else:
+					Islands.append(island)
+					if island[7]!='':
+						o=open('sequences/island.'+ID+'.fa','w')
+						o.write('>'+island[0]+' '+island[1]+' db:'+island[5]+' '+ID)
+						o.write('\n'+island[7])
+						o.close()
+
+	return Islands,errors
+
+def writing(islands,output):
+	out=open(output,'w')
+	out.write('#ACCESSION'+'\t'+'ORGANISM'+'\t'+'START'+'\t'+'END'+'\t'+'INSERTION'+'\t'+'DETECTION'+'\t'+'REFERENCE'+'\t'+'SEQUENCE')
+	for line in islands:
+		out.write('\n'+'\t'.join(line))
+	out.close()
 
 def main():
-	desired=['ACCESSION','ORGANISM','START','END','SEQUENCE','INSERTION','REFERENCE','DETECTION']
 	args=argsparse()
-	data=unpickle(args.data)
-	if args.new:
-		database=[]
+	file=args.input
+	output=args.output
+	
+	if args.seq :
+		islands,errors=sequences(file)
+		writing(islands,output)
+		o=open('errors.out','w')
+		for e in errors:
+			o.write('\n'+e)
+		o.close()
 	else:
-		database=unpickle(args.db)
-
-	database=add(data,database,desired)
-	pickle(args.db,database)
-
-#	accession={line.replace('\n','').split('\t')[0]:line.replace('\n','').split('\t')[1] for line in open(args.acc,'r')}
-#	additional=args.add 
-#	islands+=detection(desired,args.add,accession,islands)
-#	IDs=set([line.ID for line in islands])
-#	writing(desired,islands,IDs,args.output)
+		islands=uniq(file)
+		writing(islands,output)
 
 	
 if __name__ == "__main__":
