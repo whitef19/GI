@@ -3,15 +3,26 @@
 import os
 import sys
 import csv
+import logging as log
+
 import datetime
-import argparse
+#import argparse
+import click
 import pandas as pd
 from bs4 import BeautifulSoup,SoupStrainer
+log.basicConfig(filename='parse.log',level=log.DEBUG,format='%(asctime)s %(message)s')
 
-def timestamp(name):
-	print("{0} : Timestamp: {1:%Y-%m-%d %H:%M:%S}".format(name, datetime.datetime.now()))
+#concat: result = pd.concat([df1, df4], axis=1, sort=False)
 
 def writing(desired,data,columns,source):
+	# Essayer avec pandas to.csv
+
+	#import json
+	#with open('data.json') as f:
+	#data = json.load(f)
+	#with open('data.json', 'w') as outfile:
+	#json.dump(data,outfile)
+
 	f=open('table.'+source+'.tsv','w')
 	f.write('#'+'\t'.join(desired))
 	for line in data:
@@ -19,18 +30,20 @@ def writing(desired,data,columns,source):
 		f.write('\n'+'\t'.join(ajusted))
 	f.close()
 
-def argsparse():
-	parser=argparse.ArgumentParser(description="The parsing.py tool should be used with files from genomic island databases\nsuch as Islander (.sql) or ICEberg (.html) to parse them and extract the\ninformation into a tsv output file.\n\nThe user must enter the name of the database from where it comes from.\nThe user may indicate the number of base pairs that must be added to the\nends of the genomic island sequence.\n\nFor examples and more information, find the README document on the tool's github page.\n(https://github.com/whitef19/GI) ",formatter_class=argparse.RawTextHelpFormatter)
-	parser.add_argument('-i', action='store', dest='data', metavar='input', help='input file from database',required=True)
-	parser.add_argument('-db', action='store', dest='db' , metavar='source', help='islander,paidb,iceberg,iv or tsv',required=True)
-	parser.add_argument('-bp', action='store', dest='pad', metavar='base pairs',help='number of base pair to add',type=int, default=50)
-	args=parser.parse_args()
-	return args
+def complement(seq):
+    complement = {'A': 'T', 'C': 'G', 'G': 'C', 'T': 'A'} 
+    bases = list(seq) 
+    bases = [complement[base] for base in bases] 
+    return ''.join(bases)
 
-def sequences(islands,index,bp):
+@click.command()
+@click.option('--basepairs', '-bp', help='number of base pair to add', default=50, type=int)
+def sequences(islands,index,basepairs):
+	# Ajouter le brin reverse
+	# Blast quand déjà séquence https://krother.gitbooks.io/biopython-tutorial/content/BLAST.html
 	coordinate=open('no_coordinate.out','a')
 	for island in islands:
-		if (str(island[2])!='1') and ((int(island[3])-int(island[2]))>0):
+		if (str(island[2])!='1'):
 			ID=island[0]+'-'+island[2]+'-'+island[3]
 			sequence='sequences/island.'+ID+'.fa'
 			if not os.path.isfile(sequence):
@@ -38,7 +51,10 @@ def sequences(islands,index,bp):
 				genome='genomes/sequence.'+island[0]+'.fasta'
 				head=os.popen('grep ">" '+genome).read()
 				os.system('echo "'+str(head.replace('\n',''))+' '+str(island[0])+' '+str(interval)+'" >> '+str(sequence))
-				os.system('grep -v ">" '+str(genome)+" | sed ':a;N;$!ba;s/\\n//g'| cut -c "+str(interval)+' >> '+str(sequence))
+				if ((int(island[3])-int(island[2]))>0):
+					os.system('grep -v ">" '+str(genome)+" | sed ':a;N;$!ba;s/\\n//g'| cut -c "+str(interval)+' >> '+str(sequence))
+				else:
+					os.system('grep -v ">" '+str(genome)+" | sed ':a;N;$!ba;s/\\n//g'| cut -c "+(str(int(island[3])-bp)+'-'+str(int(island[2])+bp))+' >> '+str(sequence))
 			if island[index]=='':
 				with open(sequence,'r') as f:
 					for line in f:
@@ -58,18 +74,35 @@ def form(desired,data,bp):
 	islands=sequences(islands,desired.index('SEQUENCE'),bp)
 	writing(desired,islands,desired,'iv4')
 
-def IV4(desired,data,org_dict,bp):
-	islands=[]
-	columns=['ACCESSION','ORGANISM','START','END','DETECTION','SEQUENCE']
-	file=open(data,'r')
-	for line in file:
-		if not line.startswith('#'):
-			line=line.replace('\n','').split('\t')
-			organism=org_dict[line[0]] if line[0] in org_dict else None
-			line=[line[0],organism]+line[1:]+['']
-			islands.append(line)
-	islands=sequences(islands,columns.index('SEQUENCE'),bp)
-	writing(desired,islands,columns,'iv4')
+
+def island_viewer(colums_of_interest, file, accession_nb_index):
+	"""parsing of files from island viewer.
+		file: txt file from the database.
+	"""
+	islands = []
+	columns_in_db = [
+				'ACCESSION',
+				'ORGANISM',
+				'START',
+				'END',
+				'DETECTION',
+				]
+
+	with open(file,'r') as f:
+		for line in f:
+			if not line.startswith('#'):
+				island = line.replace('\n','').split('\t')
+				organism = accession_nb_index[island[0]] if island[0] in accession_nb_index else 'NA'
+				island.insert(1, organism)
+				island = [island[columns_in_db.index(c)] if c in columns_in_db else 'NA' for c in columns_of_interest]
+				islands.append(island)
+	Islands = pd.DataFrame.from_records(islands, columns=colums_of_interest)
+	
+	print(Islands)
+
+
+#	islands=sequences(islands,columns_in_db.index('SEQUENCE'),bp)
+#	writing(desired,islands,columns_in_db,'iv4')
 
 def PAIDB(desired,data,acc_dict,bp):
 	import re
@@ -203,42 +236,53 @@ def Islander(desired,data,bp):
 	writing(desired,islands,columns,'Islander')
 
 
-def main():
-	accesion='index.accession_number.txt'
-	desired=['ACCESSION','ORGANISM','START','END','INSERTION','DETECTION','REFERENCE','SEQUENCE']
-	args=argsparse()
-	bp=args.pad
+@click.command()
+@click.option('--file', '-i', help='input file from database')
+@click.option('--database', '-db', help='islander,paidb,iceberg,iv or tsv')
+#@click.option('--basepairs', '-bp', help='number of base pair to add', default=50, type=int)
+def main(file, database):
+	log.info('INPUT : '+file)
+	accession_nb_index = {nb.replace('\n','').split('\t')[0]:nb.replace('\n','').split('\t')[1] for nb in open('index.accession_number.txt','r')} 
+	columns_of_interest = [
+					'ACCESSION',
+					'ORGANISM',
+					'START',
+					'END',
+					'INSERTION',
+					'DETECTION',
+					'REFERENCE',
+					'SEQUENCE',
+					'TYPE',
+					'OTHER'
+					]
 
-	if args.db.lower() =='iv' :
-		organisms={}
-		for nb in open(accesion,'r'):
-			organisms[nb.replace('\n','').split('\t')[0]]=nb.replace('\n','').split('\t')[1]
-		IV4(desired,args.data,organisms,bp)
+	if database.lower() == 'iv' :
+		island_viewer(columns_of_interest, file, accession_nb_index)
 
-	if args.db.lower() =='paidb' :
+	if database.lower() =='paidb' :
 		accession_nb={}
 		for nb in open(accesion,'r'):
 			accession_nb[nb.replace('\n','').split('\t')[1]]=nb.replace('\n','').split('\t')[0]
 		PAIDB(desired,args.data,accession_nb,bp)
 
-	if args.db.lower() =='iceberg' :
+	if database.lower() =='iceberg' :
 		accession_nb={}
 		for nb in open(accesion,'r'):
 			accession_nb[nb.replace('\n','').split('\t')[1]]=nb.replace('\n','').split('\t')[0]
 		ICEberg(desired,args.data,accession_nb,bp)
 
-	if args.db.lower() =='islander' :
+	if database.lower() =='islander' :
 		Islander(desired,args.data,bp)
 
-	if args.db.lower() == 'tsv' :
+	if database.lower() == 'tsv' :
 		form(desired,args.data,bp)
 	#if args.db.lower() =='xlsx':
 		#excel(desired,args.data)
 
 if __name__ == "__main__":
-	timestamp("STARTING")
+	log.info('STARTING')
 	main()
-	timestamp("DONE")
+	log.info('DONE')
 
 """
 
