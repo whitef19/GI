@@ -4,7 +4,7 @@ import os
 import sys
 import csv
 import logging as log
-
+from Bio import SeqIO
 import datetime
 #import argparse
 import click
@@ -36,16 +36,47 @@ def complement(seq):
     bases = [complement[base] for base in bases] 
     return ''.join(bases)
 
-@click.command()
-@click.option('--basepairs', '-bp', help='number of base pair to add', default=50, type=int)
-def sequences(islands,index,basepairs):
+def sequences(islands,basepairs):
 	# Ajouter le brin reverse
 	# Blast quand déjà séquence https://krother.gitbooks.io/biopython-tutorial/content/BLAST.html
-	coordinate=open('no_coordinate.out','a')
+	for island in islands:
+		start = int(island[2])	
+		end =  int(island[3])
+		if start != 1:
+			ID = '{}-{}-{}'.format(island[0], island[2], island[3])
+			sequence_file = 'island_sequences/island.{}.fa'.format(ID)
+
+			if not os.path.isfile(sequence_file):
+				genome_file = 'genomes/sequence.{}.fasta'.format(island[0])
+				genome = SeqIO.read(genome_file, "fasta")
+				with open(sequence_file, "w") as out:
+					if end-start > 0:
+						SeqIO.write(genome[(start-basepairs):(end+basepairs)], out, "fasta")
+					#else:
+						#reverse = complement(genome[(end-basepairs):(start+basepairs)])
+						#SeqIO.write([reverse], out, "fasta")
+					"""
+					cmd_header = 'echo "{} {} {}-{}" >> {}'.format(head, island[0], end-basepairs, start+basepairs, sequence_file)
+					os.system(cmd_header)
+					cmd_seq = 'grep -v ">" '+genome_file+" | sed ':a;N;$!ba;s/\\n//g'| cut -c {}-{}".format(end-basepairs, start+basepairs)
+					sequence = os.popen(cmd_seq).read()
+					reverse = complement(sequence)
+					os.system('echo "{}" >> {}'.format(reverse, sequence_file))
+					"""
+			if island[8]=='NA':
+				with open(sequence_file,'r') as f:
+					for line in f:
+						if not line.startswith('>') :
+							island[8]=line.replace('\n','')
+	return islands
+
+def sequences_sed_cut(islands,bp):
+	# Ajouter le brin reverse
+	# Blast quand déjà séquence https://krother.gitbooks.io/biopython-tutorial/content/BLAST.html
 	for island in islands:
 		if (str(island[2])!='1'):
 			ID=island[0]+'-'+island[2]+'-'+island[3]
-			sequence='sequences/island.'+ID+'.fa'
+			sequence='sequences_test/island.'+ID+'.fa'
 			if not os.path.isfile(sequence):
 				interval=str(int(island[2])-bp)+'-'+str(int(island[3])+bp)
 				genome='genomes/sequence.'+island[0]+'.fasta'
@@ -53,17 +84,15 @@ def sequences(islands,index,basepairs):
 				os.system('echo "'+str(head.replace('\n',''))+' '+str(island[0])+' '+str(interval)+'" >> '+str(sequence))
 				if ((int(island[3])-int(island[2]))>0):
 					os.system('grep -v ">" '+str(genome)+" | sed ':a;N;$!ba;s/\\n//g'| cut -c "+str(interval)+' >> '+str(sequence))
-				else:
-					os.system('grep -v ">" '+str(genome)+" | sed ':a;N;$!ba;s/\\n//g'| cut -c "+(str(int(island[3])-bp)+'-'+str(int(island[2])+bp))+' >> '+str(sequence))
-			if island[index]=='':
+				#else:
+					#os.system('grep -v ">" '+str(genome)+" | sed ':a;N;$!ba;s/\\n//g'| cut -c "+(str(int(island[3])-bp)+'-'+str(int(island[2])+bp))+' >> '+str(sequence))
+			if island[8]=='':
 				with open(sequence,'r') as f:
 					for line in f:
 						if not line.startswith('>') :
-							island[index]=line.replace('\n','')
-		else :
-			coordinate.write('\n'+'\t'.join(island))
-	coordinate.close()
+							island[8]=line.replace('\n','')
 	return islands
+
 
 def form(desired,data,bp):
 	islands=[]
@@ -74,8 +103,7 @@ def form(desired,data,bp):
 	islands=sequences(islands,desired.index('SEQUENCE'),bp)
 	writing(desired,islands,desired,'iv4')
 
-
-def island_viewer(colums_of_interest, file, accession_nb_index):
+def island_viewer(columns_of_interest, file, accession_nb_index, basepairs):
 	"""parsing of files from island viewer.
 		file: txt file from the database.
 	"""
@@ -96,12 +124,13 @@ def island_viewer(colums_of_interest, file, accession_nb_index):
 				island.insert(1, organism)
 				island = [island[columns_in_db.index(c)] if c in columns_in_db else 'NA' for c in columns_of_interest]
 				islands.append(island)
-	Islands = pd.DataFrame.from_records(islands, columns=colums_of_interest)
-	
-	print(Islands)
+	Islands = pd.DataFrame.from_records(islands, columns=columns_of_interest)
 
-
-#	islands=sequences(islands,columns_in_db.index('SEQUENCE'),bp)
+#	log.info('lecture terminé')
+#	islands = sequences(islands, basepairs)
+	log.info('seqIO')
+	islands = sequences_sed_cut(islands, basepairs)
+	log.info('terminé')
 #	writing(desired,islands,columns_in_db,'iv4')
 
 def PAIDB(desired,data,acc_dict,bp):
@@ -239,8 +268,8 @@ def Islander(desired,data,bp):
 @click.command()
 @click.option('--file', '-i', help='input file from database')
 @click.option('--database', '-db', help='islander,paidb,iceberg,iv or tsv')
-#@click.option('--basepairs', '-bp', help='number of base pair to add', default=50, type=int)
-def main(file, database):
+@click.option('--basepairs', '-bp', help='number of base pair to add', default=50, type=int)
+def main(file, database, basepairs):
 	log.info('INPUT : '+file)
 	accession_nb_index = {nb.replace('\n','').split('\t')[0]:nb.replace('\n','').split('\t')[1] for nb in open('index.accession_number.txt','r')} 
 	columns_of_interest = [
@@ -251,13 +280,13 @@ def main(file, database):
 					'INSERTION',
 					'DETECTION',
 					'REFERENCE',
-					'SEQUENCE',
 					'TYPE',
+					'SEQUENCE',
 					'OTHER'
 					]
 
 	if database.lower() == 'iv' :
-		island_viewer(columns_of_interest, file, accession_nb_index)
+		island_viewer(columns_of_interest, file, accession_nb_index, basepairs)
 
 	if database.lower() =='paidb' :
 		accession_nb={}
@@ -283,9 +312,7 @@ if __name__ == "__main__":
 	log.info('STARTING')
 	main()
 	log.info('DONE')
-
 """
-
 def excel(desired,data):
 	df=pd.read_excel(data)
 	columns=[c.upper() for c in df.columns] # upper case columns name
@@ -295,84 +322,4 @@ def excel(desired,data):
 	data_list=df.values.tolist()
 	island=[Ilot(line,col,desired) for line in data_list]
 	return island
-
-
-class Ilot:
-	def __init__(self,line,col,desired):
-		self.ID=line[col.index('ACCESSION')]+'-'+str(line[col.index('START')])+'-'+str(line[col.index('END')])
-		self.positif=False
-		self.line=line
-		self.col=col
-		if 'REFERENCE' in col:
-			self.positif=True
-		self.info=[]
-
-	def get_ajusted(self,desired):
-		self.ajusted=[str(self.line[self.col.index(c)]) if c in self.col else '' for c in desired]
-		return self.ajusted
-
-	def __eq__ (self, other):
-		return self.ID==other.ID
-	def __eq__ (self, ID):
-		return self.ID==ID
-
 """
-
-
-
-"""
-
-def adding(desired,data):
-	df=pd.read_excel(data)
-	columns=[c.upper() for c in df.columns] # upper case columns name
-	df.columns=columns	#replace columns name for the upper one
-	col=[c for c in desired if c in columns]
-	df=df[col] # cut desired columns
-	data_list=df.values.tolist()
-	island=[Ilot(line,col,desired) for line in data_list]
-	return island
-
-def detection(desired,data,accession,islands):
-	add=[]
-	df=pd.read_excel(data,index_col=0,header=2,usecols=[0,1,2,5,9,11,13,15,17,19])
-	df=df.filter(like='landp',axis=0)
-	df=df.reset_index()
-	columns=[col.replace(' (%)','') for col in df.columns[3:]]
-	columns[0]='islandpick'
-	detection=df.values.tolist()
-	for line in detection:
-		line[0]=accession[str(line[0].replace('islandpick_','').split('_')[0])]
-		line=[line[0], int(line[1]), int(line[2]),';'.join((columns[p]+'='+str(pour)) for p,pour in enumerate(line[3:]))]
-		ID=line[0]+'_'+str(int(line[1]))+'_'+str(int(line[2]))
-		if ID in islands:
-			islands[islands.index(ID)].col.append('DETECTION')
-			islands[islands.index(ID)].line.append('islanpick')
-		else:
-			line=Ilot(line,['ACCESSION','START','END','DETECTION'],desired)
-			add.append(line)
-	return add
-
-def writing(desired,islands,IDs,ouput):
-	timestamp("WRITING")
-	o=open(ouput,'w') # output file
-	#o_pos=open('output.pos.out','w') # output file
-	o.write('#ID'+'\t'+'\t'.join(desired))
-	#o_pos.write('#ID'+'\t'+'\t'.join(desired))
-	count=1
-	for ID in IDs:
-		o.write('\n'+str(count)+'\t'+'\t'.join(islands[islands.index(ID)].get_ajusted(desired)))
-		#if line.positif:
-		#	o_pos.write('\n'+str(count)+'\t'+'\t'.join(line.ajusted))
-		count+=1
-
-	o.close()
-	#o_pos.close()
-	#my_file = Path("/path/to/file")
-	#if my_file.is_file():
-
-"""
-#	accession={line.replace('\n','').split('\t')[0]:line.replace('\n','').split('\t')[1] for line in open(args.acc,'r')}
-#	additional=args.add
-#	islands+=detection(desired,args.add,accession,islands)
-#	IDs=set([line.ID for line in islands])
-#	writing(desired,islands,IDs,args.output)
