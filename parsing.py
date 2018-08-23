@@ -100,7 +100,7 @@ def island_viewer(columns_of_interest, file, accession_nb_index, basepairs):
 				islands.append(island)
 	
 	islands = sequences(islands, basepairs)
-	Islands = pd.DataFrame.from_records(islands, columns=columns_of_interest)
+	Islands = pd.DataFrame.from_records(islands, columns=columns_of_interest, index='ACCESSION')
 	Islands.to_csv('table.{}.csv'.format(file.split('/')[1]))
 
 def pai_db(columns_of_interest, file, strain_index, basepairs):
@@ -111,7 +111,6 @@ def pai_db(columns_of_interest, file, strain_index, basepairs):
 		<td width=200><a href=view_pai.php?pn=Bar.G1.NC_010161_P1&m=p>Not named</a></td>
 		<td width=150><I>Bartonella tribocorum</I> CIP 105476</td>
 		<td width=200>Type IV secretion system</td>
-		<td width=120 align=left><B>NC_010161_P1</B> (25.6kb, complete PAI in the sequenced genome)<BR></td>
 	"""
 	import re
 	import urllib
@@ -147,15 +146,14 @@ def pai_db(columns_of_interest, file, strain_index, basepairs):
 					islands.append(line)
 
 	#islands = sequences(islands, basepairs)
-	Islands = pd.DataFrame.from_records(islands, columns=columns_of_interest)
+	Islands = pd.DataFrame.from_records(islands, columns=columns_of_interest, index='ACCESSION')
 	Islands.to_csv('table.{}.csv'.format(file.split('/')[1]))
 
-def iceberg(columns_of_interest, file, basepairs):
+def iceberg(columns_of_interest, file, strain_index, basepairs):
 	""" parsing of html pages from ICEberg 
 		file: directory of html files from the web page of the database.
 	"""
 	islands = []
-	query = []
 	keywords = {'Organism':'ORGANISM','Insertion site':'INSERTION','Nucleotide Sequence':'OTHER','Replicon':'ACCESSION','Genome coordinates':'START'}
 	for page in range(1,468): # page number in directory
 		with open('{}page_{}.html'.format(file, page), 'r') as f:
@@ -167,73 +165,63 @@ def iceberg(columns_of_interest, file, basepairs):
 				information = information + ['REFERENCE', ','.join([ref.text.strip().replace('PudMed','PMID') for ref in references])]
 				line = [information[information.index(column)+1] if (column in information) and (information[information.index(column)+1]) != '-' else 'NA' for column in columns_of_interest]
 				line[5] = 'ICEberg'
+				if line[0] != 'NA':
+					line[0] = line[0].split('[')[1].replace(']','')
+				else:
+					line[0] = strain_index[line[1]] if line[1] in strain_index else 'NA' 
 				if line[2] != 'NA':
 					line[3] = line[2].split('..')[1]
 					line[2] = line[2].split('..')[0]
-				if line[0] != 'NA':
-					line[0] = line[0].split('[')[1].replace(']','')
-					print(line[0])
 				line[9] = ','.join([col for col in information if col.startswith('This')])
 		islands.append(line)
-		
-	Islands = pd.DataFrame.from_records(islands, columns=columns_of_interest)
-	Islands.to_csv('table.{}.tsv'.format(file.split('/')[1]), seq='\t')
+	Islands = pd.DataFrame.from_records(islands, columns=columns_of_interest, index='ACCESSION')
+	Islands.to_csv('table.{}.tsv'.format(file.split('/')[1]), sep='\t')
 
-def Islander(desired,data,bp):
 
-	islands=[]
-	tables=['`island_sequence`','`islander`','`literature_islands`','`island`']
-	values=[[] for i in tables]
-	columns=['ACCESSION','ORGANISM','START','END','DETECTION','REFERENCE','SEQUENCE']
-	file=open(data,'r')
-	for line in file:
-		section=line.replace('\n','').split(' ')
-		if 'INSERT' in section:
-			if section[2] in tables:
-				values[tables.index(section[2])]+=line.split('VALUES ')[1].split('),(')
+def islander(columns_of_interest, file, basepairs):
+	islands = []
+	tables = ['`island_sequence`','`islander`','`literature_islands`','`island`']
+	values = [[] for i in tables]
 
-	# island_sequence
-	sequences={}
-	for line in values[0]:
-		line=line.replace('\'','').replace('(','').split(',')
-		sequences[(line[0])]=line[1]
+	columns = ['ACCESSION','ORGANISM','START','END','DETECTION','REFERENCE','SEQUENCE']
+	with open(file, 'r') as f:
+		for line in f:
+			section = line.replace('\n','').split(' ')
+			if 'INSERT' in section:
+				if section[2] in tables:
+					values[tables.index(section[2])] += line.split('VALUES ')[1].split('),(')
 
-	# literature_islands
-	IDs=[line.replace('\'','').split(',')[5] for line in values[2]]
+		# island_sequence
+		sequences = {line.replace('\'','').replace('(','').split(',')[0] : line.replace('\'','').replace('(','').split(',')[1] for line in values[0]}
 
-	# island
-	for line in values[3]:
-		line=line.replace('(','').replace('\'','').split(',')
-		if line[0] in IDs:
-			if line[0] in sequences:
-				islands.append([line[23],' '.join(line[24].split('_')),line[7],line[8],'islander','PMID:14681358',sequences[line[0]]])
-			else:
-				islands.append([line[23],' '.join(line[24].split('_')),line[7],line[8],'islander','PMID:14681358',''])
-		elif line[0] in sequences:
-			islands.append([line[23],' '.join(line[24].split('_')),line[7],line[8],'islander','',sequences[line[0]]])
-		else:
-			islands.append([line[23],' '.join(line[24].split('_')),line[7],line[8],'islander','',''])
+		# literature_islands
+		reference = [line.replace('\'','').split(',')[5] for line in values[2]] # only one reference, list of island ID with the reference
 
-	# islander
-	for line in values[1]:
-		line=line.replace('(','').replace('\'','').split(',')
-		for i,ind in enumerate(line):
-			if ind.startswith('NC_'):
-				names=line[i:]
-				break
-		if line[0] in IDs:
-			if line[0] in sequences:
-				islands.append([names[0],names[2],line[7],line[8],'islander','PMID:14681358',sequences[line[0]]])
-			else:
-				islands.append([names[0],names[2],line[7],line[8],'islander','PMID:14681358',''])
-		elif line[0] in sequences:
-			islands.append([names[0],names[2],line[7],line[8],'islander','',sequences[line[0]]])
-		else:
-			islands.append([names[0],names[2],line[7],line[8],'islander','',''])
+		# island
+		for line in values[3]:
+			line = line.replace('(','').replace('\'','').split(',')
+			index = {'ACCESSION':line[23],'ORGANISM':' '.join(line[24].split('_')), 'START':line[7], 'END':line[8], 'DETECTION': 'islander'}
+			island = [index[col] if col in index else 'NA' for col in columns_of_interest]
+			if island[0] in reference :
+				island[6] = 'PMID:14681358'
+			if island[0] in sequences:
+				island[8] = sequences[island[0]]
+			islands.append(island)
 
-	#islands = sequences(islands, basepairs)
-	writing(desired,islands,columns,'Islander')
+		# islander
+		for line in values[1]:
+			line = line.replace('(','').replace('\'','').split(',')
+			strain = line[line.index(''.join([element for element in line if element.startswith('NC_')])):]
+			index = {'ACCESSION':strain[0],'ORGANISM':strain[2], 'START':line[7], 'END':line[8], 'DETECTION': 'islander'}
+			island = [index[col] if col in index else 'NA' for col in columns_of_interest]
+			if island[0] in reference :
+				island[6] = 'PMID:14681358'
+			if island[0] in sequences:
+				island[8] = sequences[island[0]]
+			islands.append(island)
 
+	Islands = pd.DataFrame.from_records(islands, columns=columns_of_interest, index='ACCESSION')
+	Islands.to_csv('table.{}.tsv'.format(file.split('/')[1]), sep='\t')
 
 @click.command()
 @click.option('--file', '-i', help='input file from database')
@@ -263,21 +251,20 @@ def main(file, database, basepairs):
 		pai_db(columns_of_interest, file, strain_index, basepairs)
 
 	if database.lower() =='iceberg' :
-		iceberg(columns_of_interest, file, basepairs)
+		iceberg(columns_of_interest, file, strain_index, basepairs)
 
 	if database.lower() =='islander' :
-		Islander(desired,args.data,bp)
-
-	if database.lower() == 'tsv' :
-		form(desired,args.data,bp)
-	#if args.db.lower() =='xlsx':
-		#excel(desired,args.data)
+		islander(columns_of_interest, file, basepairs)
 
 if __name__ == "__main__":
 	log.info('STARTING')
 	main()
 	log.info('DONE')
+
+
 """
+	#if args.db.lower() =='xlsx':
+		#excel(desired,args.data)
 def excel(desired,data):
 	df=pd.read_excel(data)
 	columns=[c.upper() for c in df.columns] # upper case columns name
@@ -288,6 +275,8 @@ def excel(desired,data):
 	island=[Ilot(line,col,desired) for line in data_list]
 	return island
 
+	if database.lower() == 'tsv' :
+		form(desired,args.data,bp)
 def form(desired,data,bp):
 	islands=[]
 	for line in open(data,'r'):
