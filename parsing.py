@@ -10,11 +10,15 @@ import datetime
 import click
 import pandas as pd
 from bs4 import BeautifulSoup,SoupStrainer
-log.basicConfig(filename='parse.log',level=log.DEBUG,format='%(asctime)s %(message)s')
+log.basicConfig(filename='log_parsing',level=log.DEBUG,format='%(asctime)s %(message)s')
 
 #concat: result = pd.concat([df1, df4], axis=1, sort=False)
 
-def writing(desired,data,columns,source):
+def writing(columns_of_interest, islands, source):
+	Islands = pd.DataFrame.from_records(islands, columns=columns_of_interest)
+	Islands.to_csv(source)
+
+
 	# Essayer avec pandas to.csv
 
 	#import json
@@ -22,14 +26,14 @@ def writing(desired,data,columns,source):
 	#data = json.load(f)
 	#with open('data.json', 'w') as outfile:
 	#json.dump(data,outfile)
-
+	"""
 	f=open('table.'+source+'.tsv','w')
 	f.write('#'+'\t'.join(desired))
 	for line in data:
 		ajusted=[str(line[columns.index(c)]) if c in columns else '' for c in desired]
 		f.write('\n'+'\t'.join(ajusted))
 	f.close()
-
+	"""
 def complement(seq):
     complement = {'A': 'T', 'C': 'G', 'G': 'C', 'T': 'A'} 
     bases = list(seq) 
@@ -70,42 +74,12 @@ def sequences(islands,basepairs):
 							island[8]=line.replace('\n','')
 	return islands
 
-def sequences_sed_cut(islands,bp):
-	# Ajouter le brin reverse
-	# Blast quand déjà séquence https://krother.gitbooks.io/biopython-tutorial/content/BLAST.html
-	for island in islands:
-		if (str(island[2])!='1'):
-			ID=island[0]+'-'+island[2]+'-'+island[3]
-			sequence='sequences_test/island.'+ID+'.fa'
-			if not os.path.isfile(sequence):
-				interval=str(int(island[2])-bp)+'-'+str(int(island[3])+bp)
-				genome='genomes/sequence.'+island[0]+'.fasta'
-				head=os.popen('grep ">" '+genome).read()
-				os.system('echo "'+str(head.replace('\n',''))+' '+str(island[0])+' '+str(interval)+'" >> '+str(sequence))
-				if ((int(island[3])-int(island[2]))>0):
-					os.system('grep -v ">" '+str(genome)+" | sed ':a;N;$!ba;s/\\n//g'| cut -c "+str(interval)+' >> '+str(sequence))
-				#else:
-					#os.system('grep -v ">" '+str(genome)+" | sed ':a;N;$!ba;s/\\n//g'| cut -c "+(str(int(island[3])-bp)+'-'+str(int(island[2])+bp))+' >> '+str(sequence))
-			if island[8]=='':
-				with open(sequence,'r') as f:
-					for line in f:
-						if not line.startswith('>') :
-							island[8]=line.replace('\n','')
-	return islands
-
-
-def form(desired,data,bp):
-	islands=[]
-	for line in open(data,'r'):
-		if not line.startswith('#'):
-			line=line.replace('\n','').split('\t')
-			islands.append(line)
-	islands=sequences(islands,desired.index('SEQUENCE'),bp)
-	writing(desired,islands,desired,'iv4')
 
 def island_viewer(columns_of_interest, file, accession_nb_index, basepairs):
-	"""parsing of files from island viewer.
+	""" parsing of files from island viewer.
+		
 		file: txt file from the database.
+		# NC_009925.1 2268064 2280662 Islander
 	"""
 	islands = []
 	columns_in_db = [
@@ -124,90 +98,86 @@ def island_viewer(columns_of_interest, file, accession_nb_index, basepairs):
 				island.insert(1, organism)
 				island = [island[columns_in_db.index(c)] if c in columns_in_db else 'NA' for c in columns_of_interest]
 				islands.append(island)
+	
+	islands = sequences(islands, basepairs)
 	Islands = pd.DataFrame.from_records(islands, columns=columns_of_interest)
+	Islands.to_csv('table.{}.csv'.format(file.split('/')[1]))
 
-#	log.info('lecture terminé')
-#	islands = sequences(islands, basepairs)
-	log.info('seqIO')
-	islands = sequences_sed_cut(islands, basepairs)
-	log.info('terminé')
-#	writing(desired,islands,columns_in_db,'iv4')
+def pai_db(columns_of_interest, file, strain_index, basepairs):
+	""" parsing of files from pai-db, pai and rei
+		extract only the table sections 
 
-def PAIDB(desired,data,acc_dict,bp):
+		file: html file from the web page of the database.
+		<td width=200><a href=view_pai.php?pn=Bar.G1.NC_010161_P1&m=p>Not named</a></td>
+		<td width=150><I>Bartonella tribocorum</I> CIP 105476</td>
+		<td width=200>Type IV secretion system</td>
+		<td width=120 align=left><B>NC_010161_P1</B> (25.6kb, complete PAI in the sequenced genome)<BR></td>
+	"""
 	import re
 	import urllib
 	import requests as req
 
-	islands=[]
-	file=open(data,'r')
-	table=SoupStrainer("table")
-	soup=BeautifulSoup(file,'html.parser',parse_only=table).find_all(bordercolordark='white')
-	for species in soup:
-		for island in species.findAll(valign='top'):
-			cells=island.findAll('td') # list
-			if len(cells) >0:
-				link=cells[1].find('a').get('href')
-				strain=cells[2].text.strip()
-				insertion=cells[4].text.strip()
-				locus=cells[5].text.strip().split('(')[0].replace(' ','')
-				end=int(float(cells[5].text.strip().split('(')[1].split('kb')[0])*1000)
+	islands = []
+	with open (file, 'r') as f:
+		subset = SoupStrainer("table")
+		tables = BeautifulSoup(f, 'html.parser', parse_only=subset).find_all(bordercolordark='white')
+		for species in tables:
+			for island in species.findAll(valign='top'): # only table with data, not header
+				cells = island.findAll('td') 
+				if len(cells) >0:
+					line = ['NA' for c in columns_of_interest]
+					line[1] = cells[2].text.strip()
+					line[4] = cells[4].text.strip()
+					line[9] = cells[5].text.strip().split('(')[0].replace(' ','')
+					line[0] = strain_index[line[1]] if line[1] in strain_index else 'NA'
+					line[5] = 'paidb'
+					link = cells[1].find('a').get('href')
 
-				organism=' '.join(strain.split(' '))
-				if organism in acc_dict:
-					accession=acc_dict[organism]
-				else:
-					accession=''
-				resp=req.get('http://www.paidb.re.kr/'+link) # crawling island page
-				file=resp.text
-				soup=BeautifulSoup(file,'html.parser').select('table') #.findAll('b')
-				reference=[]
-				for i,row in enumerate(soup):
-					if str(i)=='1':
-						section=row.findAll('td')
-						publication=section[0].text.strip().split('.')
-						for pub in publication:
-							pub=pub.split(' ')
-							if 'PUBMED' in pub :
-								reference.append('PMID:'+str(pub[pub.index('PUBMED')+1]))
-				line=[accession,strain,'1',str(end),insertion,'PAIDB',','.join(reference),locus]
-				islands.append(line)
-	#islands=sequences(islands,desired.index('SEQUENCE'),bp)
-	writing(desired,islands,desired,'PAIDB')
+					#references
+					page = req.get('http://www.paidb.re.kr/{}'.format(link)) # crawling island page
+					page_file = page.text
+					page_tables = BeautifulSoup(page_file,'html.parser').select('table')
+					references = []
+					publications = page_tables[1].findAll('i')
+					for ref in publications: 
+						ref = ref.text.strip().split(' ')
+						if 'PUBMED' in ref:
+							references.append('PMID:{}'.format(ref[ref.index('PUBMED')+1]))
+					line[6] = ','.join(references)
+					islands.append(line)
 
-def ICEberg(desired,data,acc_dict,bp):
-	islands=[]
-	query=[]
-	for page in range(1,467): # nombre de page
-		line=[ '' for i in desired]
-		line[5]='ICEberg'
-		reference=[]
-		file=open(data+'page_'+str(page)+'.html','r')
-		soup=BeautifulSoup(file,'html.parser').findAll('tr')
-		for row in soup:
-			cells=row.findAll('td')
-			if len(cells)>0 :
-				if cells[0].text.strip() == 'Organism':
-					line[1]=cells[1].text.strip()
-				elif cells[0].text.strip() == 'Genome coordinates':
-					line[2]=cells[1].text.strip().split('..')[0]
-					line[3]=cells[1].text.strip().split('..')[1]
-				elif cells[0].text.strip() == 'Insertion site':
-					line[4]=cells[1].text.strip()
-				elif cells[0].text.strip() == 'Nucleotide Sequence':
-					line[7]=cells[1].text.strip()
-					query.append(line[7].split(';')[0])
-				elif cells[0].text.strip().startswith('This is a') :
-					reference.append(cells[0].text.strip())
-				elif cells[0].text.strip().startswith('(') :
-					reference.append(cells[0].text.strip().split('[')[1].replace(']','').replace('PudMed','PMID'))
+	#islands = sequences(islands, basepairs)
+	Islands = pd.DataFrame.from_records(islands, columns=columns_of_interest)
+	Islands.to_csv('table.{}.csv'.format(file.split('/')[1]))
 
-		line[6]=','.join(reference)
-		organism=' '.join(line[1].split(' ')[:2]) if line[1]!='' else None
-		if organism in acc_dict:
-			line[0]=acc_dict[organism]
+def iceberg(columns_of_interest, file, basepairs):
+	""" parsing of html pages from ICEberg 
+		file: directory of html files from the web page of the database.
+	"""
+	islands = []
+	query = []
+	keywords = {'Organism':'ORGANISM','Insertion site':'INSERTION','Nucleotide Sequence':'OTHER','Replicon':'ACCESSION','Genome coordinates':'START'}
+	for page in range(1,468): # page number in directory
+		with open('{}page_{}.html'.format(file, page), 'r') as f:
+			data = BeautifulSoup(f, 'html.parser').select('table')
+			if len(data) > 5: # empty page
+				table = data[0].select('td')
+				references = data[4].select('a')
+				information = [keywords[column.text.strip()] if column.text.strip() in keywords else column.text.strip() for column in table ]
+				information = information + ['REFERENCE', ','.join([ref.text.strip().replace('PudMed','PMID') for ref in references])]
+				line = [information[information.index(column)+1] if (column in information) and (information[information.index(column)+1]) != '-' else 'NA' for column in columns_of_interest]
+				line[5] = 'ICEberg'
+				if line[2] != 'NA':
+					line[3] = line[2].split('..')[1]
+					line[2] = line[2].split('..')[0]
+				if line[0] != 'NA':
+					line[0] = line[0].split('[')[1].replace(']','')
+					print(line[0])
+				line[9] = ','.join([col for col in information if col.startswith('This')])
 		islands.append(line)
-	islands=sequences(islands,desired.index('SEQUENCE'),bp)
-	writing(desired,islands,desired,'ICEberg')
+		
+	Islands = pd.DataFrame.from_records(islands, columns=columns_of_interest)
+	Islands.to_csv('table.{}.tsv'.format(file.split('/')[1]), seq='\t')
 
 def Islander(desired,data,bp):
 
@@ -261,7 +231,7 @@ def Islander(desired,data,bp):
 		else:
 			islands.append([names[0],names[2],line[7],line[8],'islander','',''])
 
-	islands=sequences(islands,columns.index('SEQUENCE'),bp)
+	#islands = sequences(islands, basepairs)
 	writing(desired,islands,columns,'Islander')
 
 
@@ -272,33 +242,28 @@ def Islander(desired,data,bp):
 def main(file, database, basepairs):
 	log.info('INPUT : '+file)
 	accession_nb_index = {nb.replace('\n','').split('\t')[0]:nb.replace('\n','').split('\t')[1] for nb in open('index.accession_number.txt','r')} 
+	strain_index = {nb.replace('\n','').split('\t')[1]:nb.replace('\n','').split('\t')[0] for nb in open('index.accession_number.txt','r')} 
 	columns_of_interest = [
-					'ACCESSION',
-					'ORGANISM',
-					'START',
-					'END',
-					'INSERTION',
-					'DETECTION',
-					'REFERENCE',
-					'TYPE',
-					'SEQUENCE',
-					'OTHER'
+					'ACCESSION', #0
+					'ORGANISM',  #1
+					'START',     #2
+					'END',       #3
+					'INSERTION', #4
+					'DETECTION', #5
+					'REFERENCE', #6
+					'TYPE',      #7
+					'SEQUENCE',  #8
+					'OTHER'      #9
 					]
 
 	if database.lower() == 'iv' :
 		island_viewer(columns_of_interest, file, accession_nb_index, basepairs)
 
 	if database.lower() =='paidb' :
-		accession_nb={}
-		for nb in open(accesion,'r'):
-			accession_nb[nb.replace('\n','').split('\t')[1]]=nb.replace('\n','').split('\t')[0]
-		PAIDB(desired,args.data,accession_nb,bp)
+		pai_db(columns_of_interest, file, strain_index, basepairs)
 
 	if database.lower() =='iceberg' :
-		accession_nb={}
-		for nb in open(accesion,'r'):
-			accession_nb[nb.replace('\n','').split('\t')[1]]=nb.replace('\n','').split('\t')[0]
-		ICEberg(desired,args.data,accession_nb,bp)
+		iceberg(columns_of_interest, file, basepairs)
 
 	if database.lower() =='islander' :
 		Islander(desired,args.data,bp)
@@ -322,4 +287,14 @@ def excel(desired,data):
 	data_list=df.values.tolist()
 	island=[Ilot(line,col,desired) for line in data_list]
 	return island
+
+def form(desired,data,bp):
+	islands=[]
+	for line in open(data,'r'):
+		if not line.startswith('#'):
+			line=line.replace('\n','').split('\t')
+			islands.append(line)
+	islands=sequences(islands,desired.index('SEQUENCE'),bp)
+	writing(desired,islands,desired,'iv4')
+
 """
