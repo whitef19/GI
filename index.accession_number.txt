@@ -6228,3 +6228,23 @@ NZ_LT635772.1	Anaerococcus sp. Marseille P2765 strain Marseille P2765T genome as
 NZ_LT671859.1	Staphylococcus aureus subsp. aureus isolate Clinical isolate genome assembly
 NZ_LT673656.1	Pseudomonas aeruginosa isolate PcyII 10 genome assembly
 NZ_LT700188.1	Negativicoccus massiliensis strain AT7 genome assembly
+NC_000913.3	Escherichia coli str. K-12 substr. MG1655
+NC_004741.1	Shigella flexneri 2a str. 2457T
+NC_006834.1	Xanthomonas oryzae pv. oryzae KACC 10331
+NC_007613.1	Shigella boydii Sb227
+NC_008023.1	Streptococcus pyogenes MGAS2096
+NC_008258.1	Shigella flexneri 5 str. 8401
+NC_008343.1	Granulibacter bethesdensis CGDNIH1
+NC_008820.1	Prochlorococcus marinus str. MIT 9303
+NC_009707.1	Campylobacter jejuni subsp. doylei 269
+NC_010658.1	Shigella boydii CDC 3083-94
+NC_011586.1	Acinetobacter baumannii AB0057
+NC_012471.1	Streptococcus equi subsp. equi 4047
+NC_014972.1	Desulfobulbus propionicus DSM 2032
+NC_016831.1	Salmonella enterica subsp. enterica serovar
+NC_017208.1	Bacillus thuringiensis serovar chinensis CT-43
+NC_017328.1	Shigella flexneri 2002017
+NC_017481.1	Lactobacillus salivarius CECT 5713
+NC_017663.1	Escherichia coli P12b
+NC_018594.1	Streptococcus pneumoniae SPNA45
+NC_018748.1	Emticicia oligotrophica DSM 17448
