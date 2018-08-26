@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# python 3.5
+# python 3.5.2
 import os
 import sys
 import csv
@@ -13,30 +13,31 @@ log.basicConfig(filename='log_parsing',level=log.DEBUG,format='%(asctime)s %(mes
 def sequences(islands,basepairs):
 	validation = []
 	for island in islands:
-		ID = '{}-{}-{}'.format(island[0], island[2], island[3])
-		sequence_file = 'island_sequences/island.{}.fa'.format(ID)
-		if not os.path.isfile(sequence_file):
-			start = int(island[2])	
-			end =  int(island[3]) 
-			genome_file = 'genomes/sequence.{}.fasta'.format(island[0])
-			genome = SeqIO.read(genome_file, "fasta")
-			with open(sequence_file, "w") as outfile:
-				if end-start > 0:
-					sequence = str(genome.seq[(start-basepairs):(end+basepairs)])
-					outfile.write('>{} {} {}-{}'.format(genome.description, island[0], start-basepairs, end+basepairs))
-					outfile.write('\n{}'.format(sequence))
-				else:
-					reverse = complement(genome.seq[(end-basepairs):(start+basepairs)])
-					outfile.write('>{} {} {}-{}'.format(genome.description, island[0], start+basepairs, end-basepairs))
-					outfile.write('\n{}'.format(reverse))
-		
-		with open(sequence_file,'r') as f:
-			for line in f:
-				if not line.startswith('>'):
-					if island[9]=='NA':
-						island[9] = line.replace('\n','')
-					else :
-						validation.append([ID, island[5], island[9], line.replace('\n','')]) # to compare sequences
+		if 'NA' not in [island[0], island[2], island[3]]:
+			ID = '{}-{}-{}'.format(island[0], island[2], island[3])
+			sequence_file = 'island_sequences/island.{}.fa'.format(ID)
+			if not os.path.isfile(sequence_file):
+				start = int(island[2])	
+				end =  int(island[3]) 
+				genome_file = 'genomes/sequence.{}.fasta'.format(island[0])
+				genome = SeqIO.read(genome_file, "fasta")
+				with open(sequence_file, "w") as outfile:
+					if end-start > 0:
+						sequence = str(genome.seq[(start-basepairs):(end+basepairs)])
+						outfile.write('>{} {} {}-{}'.format(genome.description, island[0], start-basepairs, end+basepairs))
+						outfile.write('\n{}'.format(sequence))
+					else:
+						reverse = complement(genome.seq[(end-basepairs):(start+basepairs)])
+						outfile.write('>{} {} {}-{}'.format(genome.description, island[0], start+basepairs, end-basepairs))
+						outfile.write('\n{}'.format(reverse))
+			
+			with open(sequence_file,'r') as f:
+				for line in f:
+					if not line.startswith('>'):
+						if island[9]=='NA':
+							island[9] = line.replace('\n','')
+						else :
+							validation.append([ID, island[5], island[9], line.replace('\n','')]) # to compare sequences
 
 	with open('sequences_validation.txt', 'a') as out:
 		for seq in validation:
@@ -127,7 +128,7 @@ def pai_db(columns_of_interest,file,positif_dataset,negative_dataset,strain_inde
 					island[7] = 'NEG' if '{}-{}-{}'.format(island[0], island[2], island[3]) in negative_dataset else 'NA'
 					islands.append(island)
 
-	#islands = sequences(islands, basepairs)
+	islands = sequences(islands, basepairs)
 	Islands = pd.DataFrame.from_records(islands, columns=columns_of_interest, index='ACCESSION')
 	Islands.to_csv('table.{}.tsv'.format(file.split('/')[1]), sep='\t')
 
@@ -155,14 +156,19 @@ def iceberg(columns_of_interest,path,positif_dataset,negative_dataset,strain_ind
 				if island[2] != 'NA':
 					island[3] = island[2].split('..')[1]
 					island[2] = island[2].split('..')[0]
-				island[8] = island[8]+','.join([col for col in information if col.startswith('This')])
+				island[8] = island[8]+','.join([col for col in information if col.startswith('This')]) if island[8] != 'NA' else ','.join([col for col in information if col.startswith('This')])
 				island[7] = 'VP' if '{}-{}-{}'.format(island[0], island[2], island[3]) in positif_dataset else 'NA'
 				island[7] = 'NEG' if '{}-{}-{}'.format(island[0], island[2], island[3]) in negative_dataset else 'NA'
 		islands.append(island)
+
+	islands = sequences(islands, basepairs)
 	Islands = pd.DataFrame.from_records(islands, columns=columns_of_interest, index='ACCESSION')
 	Islands.to_csv('table.iceberg.tsv', sep='\t')
 
 def islander(columns_of_interest,file,positif_dataset,negative_dataset,basepairs):
+	""" parsing of sql file from Islander 
+		file: several section (tables object listed the keeped sections)
+	"""
 	islands = []
 	tables = ['`island_sequence`','`islander`','`literature_islands`','`island`']
 	values = [[] for i in tables]
@@ -198,84 +204,55 @@ def islander(columns_of_interest,file,positif_dataset,negative_dataset,basepairs
 		island[7] = 'NEG' if '{}-{}-{}'.format(island[0], island[2], island[3]) in negative_dataset else 'NA'
 		islands.append(island)
 
+	islands = sequences(islands, basepairs)
 	Islands = pd.DataFrame.from_records(islands, columns=columns_of_interest, index='ACCESSION')
 	Islands.to_csv('table.{}.tsv'.format(file.split('/')[1]), sep='\t')
 
-def uniq(columns_of_interest,file): #concat: result = pd.concat([df1, df4], axis=1, sort=False)
+def concatenate(columns_of_interest,files): 
 	"""
-	files = (pd.concat([pd.read_csv(f, sep='\t', index_col='ACCESSION' ) for f in file ])).reset_index().values.tolist()
-	Islands=[]
-	IDs=[]
-	sources=['ICEberg','islander','PAIDB','Dimob','islandviewer','Islander','Sigi','Islandpick']
-	islands=[{} for i in sources]
-	for line in files:
-		if 'NA' not in line[:4]:
-			source = line[5]
-			ID = '{}-{}-{}'.format(line[0],line[2],line[3])
-			islands[sources.index(source)][ID] = (line)
-			IDs.append(ID)
+	concatenation of tsv files
+	filter duplicate with island ID 
+	"""
+	sources = ['ICEberg','islander','paidb','Dimob','islandviewer','Islander','Sigi','Islandpick']
+	islands = []
+	island_IDs = []
+	island_dct = [ {} for source in sources ]
+	for source in files :
+		with open(source, 'r') as f:
+			for island in f :
+				if not island.startswith('ACCESSION'):
+					island = island.replace('\n','').split('\t')
+					if (len(island)==10) :
+						if 'NA' in island[:4]:
+							islands.append(island)
+						else :
+							ID = '{}-{}-{}'.format(island[0].split('.')[0], island[2], island[3])
+							island_IDs.append(ID)
+							island_dct[sources.index(island[5])][ID] = island
+
+	island_IDs = list(set(island_IDs))
+	for ID in island_IDs:
+		information = [source[ID] for source in island_dct if ID in source ]
+		if len(information) == 1 :
+			islands.append(information[0])
 		else :
-			Islands.append(line)
+			colums = [(list(set([source[i] for source in information ]))) for i in range(len(columns_of_interest))]
+			island = [','.join(col) if idx!=7 else col[0] for idx,col in enumerate(colums)]
+			islands.append(island)
 
-	for ID in list(set(IDs)):
-		table = [source[ID] for source in islands if ID in source]
-		if len(table)>1:
-			colums = [(list(set([row[i] for row in table]))) for i in range(8) ]
-			line = [','.join(col) if idx!=7 else col[0] for idx,col in enumerate(colums)]
-			Islands.append(line)
-		else: 
-			Islands.append(table[0])
-
-	Islands = pd.DataFrame.from_records(Islands, columns=columns_of_interest)
-	Islands.to_csv('database.tsv', sep='\t')
-
-
-################################
-"""
-	
-	ilot = []
-	for db in file:
-		with open (db,'r') as f:
-			for line in f:
-				if not line.startswith("ACCESSION"):
-					ilot.append(line.replace('\n','').split('\t'))
-
-	Islands=[]
-	IDs=[]
-	sources=['ICEberg','islander','PAIDB','Dimob','islandviewer','Islander','Sigi','Islandpick']
-	islands=[{} for i in sources]
-	for line in ilot:
-		if ('' not in line[:4]) and (len(line)==8):
-			source=line[5]
-			ID=line[0]+'-'+line[2]+'-'+line[3]
-			islands[sources.index(source)][ID]=(line)
-			IDs.append(ID)
-		else:
-			Islands.append(line)
-	for ID in list(set(IDs)):
-		table=[source[ID] for source in islands if ID in source]
-		if len(table)>1:
-			colums=[(list(set([row[i] for row in table]))) for i in range(8) ]
-			line=[','.join(col) if idx!=7 else col[0] for idx,col in enumerate(colums)]
-			Islands.append(line)
-		else: 
-			Islands.append(table[0])
-
-	Islands = (Islands)
-	Islands = pd.DataFrame.from_records(Islands, columns=columns_of_interest)
-	Islands.to_csv('database.tsv', sep='\t')
-
+	Islands = pd.DataFrame.from_records(islands, columns=columns_of_interest )
+	Islands.to_csv('database_1.0.tsv', sep='\t')
 
 ###################################
 # OPTIONS
 ###################################
 @click.command()
-@click.option('--file', '-i', help='input file from database', multiple=True)
+@click.option('--file', '-i', help='input file from database')
 @click.option('--positif', '-pos', help='positif dataset')
 @click.option('--negative', '-neg', help='negative dataset')
 @click.option('--database', '-db', help='islander,paidb,iceberg,iv or tsv')
 @click.option('--basepairs', '-bp', help='number of base pair to add', default=50, type=int)
-@click.option('--cat', '-cat', help='concatenate all the csv', is_flag=True)
+@click.option('--cat', '-cat', help='concatenate all the csv', nargs=9)
 def main(file, positif, negative, database, basepairs, cat):
 	accession_nb_index = {nb.replace('\n','').split('\t')[0]:nb.replace('\n','').split('\t')[1] for nb in open('index.accession_number.txt','r')} 
 	strain_index = {nb.replace('\n','').split('\t')[1]:nb.replace('\n','').split('\t')[0] for nb in open('index.accession_number.txt','r')} 
@@ -288,30 +265,29 @@ def main(file, positif, negative, database, basepairs, cat):
 					'DETECTION', #5
 					'REFERENCE', #6
 					'TYPE',      #7
-					'OTHER',      #8
-					'SEQUENCE'  #9
+					'OTHER',     #8
+					'SEQUENCE'   #9
 					]
 
-	positif_dataset = excel(columns_of_interest, positif)
-	negative_dataset = excel(columns_of_interest, negative)
-
 	if database:
-		log.info('INPUT : '+file[0])
+		log.info('INPUT : '+file)
+		positif_dataset = excel(columns_of_interest, positif)
+		negative_dataset = excel(columns_of_interest, negative)
 
 		if database.lower() == 'iv' :
-			island_viewer(columns_of_interest, file[0], positif_dataset, negative_dataset, accession_nb_index, basepairs)
+			island_viewer(columns_of_interest, file, positif_dataset, negative_dataset, accession_nb_index, basepairs)
 
 		if database.lower() =='paidb' :
-			pai_db(columns_of_interest, file[0], positif_dataset, negative_dataset, strain_index, basepairs)
+			pai_db(columns_of_interest, file, positif_dataset, negative_dataset, strain_index, basepairs)
 
 		if database.lower() =='iceberg' :
-			iceberg(columns_of_interest, file[0], positif_dataset, negative_dataset, strain_index, basepairs)
+			iceberg(columns_of_interest, file, positif_dataset, negative_dataset, strain_index, basepairs)
 
 		if database.lower() =='islander' :
-			islander(columns_of_interest, file[0], positif_dataset, negative_dataset, basepairs)
+			islander(columns_of_interest, file, positif_dataset, negative_dataset, basepairs)
 
 	if cat :
-		uniq(columns_of_interest, file)
+		concatenate(columns_of_interest, cat)
 
 	log.info('DONE')
 
@@ -319,30 +295,3 @@ if __name__ == "__main__":
 	log.info('STARTING')
 	main()
 	
-
-
-"""
-	#if args.db.lower() =='xlsx':
-		#excel(desired,args.data)
-def excel(desired,data):
-	df=pd.read_excel(data)
-	columns=[c.upper() for c in df.columns] # upper case columns name
-	df.columns=columns	#replace columns name for the upper one
-	col=[c for c in desired if c in columns]
-	df=df[col] # cut desired columns
-	data_list=df.values.tolist()
-	island=[Ilot(line,col,desired) for line in data_list]
-	return island
-
-	if database.lower() == 'tsv' :
-		form(desired,args.data,bp)
-def form(desired,data,bp):
-	islands=[]
-	for line in open(data,'r'):
-		if not line.startswith('#'):
-			line=line.replace('\n','').split('\t')
-			islands.append(line)
-	islands=sequences(islands,desired.index('SEQUENCE'),bp)
-	writing(desired,islands,desired,'iv4')
-
-"""
