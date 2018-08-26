@@ -25,9 +25,9 @@ ID	ACC_NB	ORGANISME	START	STOP	SEQUENCE	INSERTION*	REFERENCES  DETECTION*
 python3 parsing.py -i input/iceberg/ -pos input/SupTable1.xlsx -neg input/SupTable2.xlsx  -db iceberg -bp 50
 ```
 *output : table.iceberg.tsv*
-> Islands  :   468  
-> Uniques  :   354
-> NA       :   258 (39 ont des souches inconnus ('Unknown strain'))
+> Islands  :   468   
+> Uniques  :   354    
+> NA       :   258 (39 ont des souches inconnus ('Unknown strain'))    
 
 
 # Islander 
@@ -42,9 +42,9 @@ python3 parsing.py -i input/iceberg/ -pos input/SupTable1.xlsx -neg input/SupTab
 python3 parsing.py -i input/islander.08.03.2015.sql -pos input/SupTable1.xlsx -neg input/SupTable2.xlsx  -db islander -bp 50
 ```
 *output :table.islander.08.03.2015.sql.tsv*
-* Islands  : 4 208
-* Uniques  : 4 208
-* NA       :     1
+> Islands  : 4 208   
+> Uniques  : 4 208    
+> NA       :     1   
 
 # IslandViewer
 [ site web ](http://www.pathogenomics.sfu.ca/islandviewer/)   
@@ -69,18 +69,18 @@ python3 parsing.py -i input/islander.08.03.2015.sql -pos input/SupTable1.xlsx -n
 python3 parsing.py -i input/all_gis_islander_iv4.txt -pos input/SupTable1.xlsx -neg input/SupTable2.xlsx  -db iv -bp 50
 ```
 *output : table.all_gis_islander_iv4.txt.tsv*
-> Islands  : 3 170
-> Uniques  : 3 170
-> NA       :     0 
+> Islands  : 3 170   
+> Uniques  : 3 170   
+> NA       :     0    
 
 ```bash
 # IslandViewer 4 islandpath dimob
 python3 parsing.py -i input/all_gis_islandpath_dimob_iv4.txt -pos input/SupTable1.xlsx -neg input/SupTable2.xlsx  -db iv -bp 50
 ```
 *output : table.all_gis_islandpath_dimob_iv4.txt.tsv*
-> Islands  : 51 425 
-> Uniques  : 51 425  
-> NA       :      0
+> Islands  : 51 425    
+> Uniques  : 51 425     
+> NA       :      0   
 
 ```bash
 # IslandViewer 4 islandpick
@@ -96,18 +96,18 @@ python3 parsing.py -i input/all_gis_islandpick_iv4.txt -pos input/SupTable1.xlsx
 python3 parsing.py -i input/all_gis_islandviewer_iv4.txt -pos input/SupTable1.xlsx -neg input/SupTable2.xlsx  -db iv -bp 50
 ```
 *output :table.all_gis_islandviewer_iv4.txt.tsv*
-> Islands  :110 914  
-> Uniques  :110 914 
-> NA       :      0
+> Islands  :110 914     
+> Uniques  :110 914    
+> NA       :      0   
 
 ```bash
 # IslandViewer 4 sigi hmm
 python3 parsing.py -i input/all_gis_sigi_hmm_iv4.txt -pos input/SupTable1.xlsx -neg input/SupTable2.xlsx  -db iv -bp 50
 ```
 *output :table.all_gis_sigi_hmm_iv4.txt.tsv*
-> Islands  : 63 917
-> Uniques  : 63 917 
-> NA       :      0  
+> Islands  : 63 917   
+> Uniques  : 63 917    
+> NA       :      0     
 
 # PAIDB
 [ site web ](http://www.paidb.re.kr/browse_pais.php?m=p)
@@ -121,18 +121,18 @@ python3 parsing.py -i input/all_gis_sigi_hmm_iv4.txt -pos input/SupTable1.xlsx -
 python3 parsing.py -i input/PAIDB_PAI.html -pos input/SupTable1.xlsx -neg input/SupTable2.xlsx  -db paidb -bp 50
 ```
 *output :table.PAIDB_PAI.html.tsv*
-> Islands  :   986 
-> Uniques  :   986 
-> NA       :   904
+> Islands  :   986    
+> Uniques  :   986    
+> NA       :   904   
 
 ```bash
 # PAIDB REI
 python3 parsing.py -i input/PAIDB_REI.html -pos input/SupTable1.xlsx -neg input/SupTable2.xlsx  -db paidb -bp 50
 ```
 *output :table.PAIDB_REI.html.tsv*
-> Islands  :   108
-> Uniques  :   108
-> NA       :    95
+> Islands  :   108   
+> Uniques  :   108   
+> NA       :    95   
 
 
 # Analyse 
@@ -157,5 +157,6 @@ mv table.all_gis_islander_iv4.txt.tsv Tables/.
 python3 parsing.py -cat Tables/*
 ```
 *output: database_1.0.tsv*
-* Islands  : 181 699
-* NA       :   9 221
+> Islands  : 181 699   
+> NA       :   9 221   
+

@@ -11,37 +11,51 @@ from bs4 import BeautifulSoup,SoupStrainer
 log.basicConfig(filename='log_parsing',level=log.DEBUG,format='%(asctime)s %(message)s')
 
 def sequences(islands,basepairs):
+	genomes_to_add = []
 	validation = []
+	fasta = True
 	for island in islands:
+
 		if 'NA' not in [island[0], island[2], island[3]]:
 			ID = '{}-{}-{}'.format(island[0], island[2], island[3])
-			sequence_file = 'island_sequences/island.{}.fa'.format(ID)
+			sequence_file = 'islands_sequence/island.{}.fa'.format(ID)
 			if not os.path.isfile(sequence_file):
 				start = int(island[2])	
 				end =  int(island[3]) 
 				genome_file = 'genomes/sequence.{}.fasta'.format(island[0])
-				genome = SeqIO.read(genome_file, "fasta")
-				with open(sequence_file, "w") as outfile:
-					if end-start > 0:
-						sequence = str(genome.seq[(start-basepairs):(end+basepairs)])
-						outfile.write('>{} {} {}-{}'.format(genome.description, island[0], start-basepairs, end+basepairs))
-						outfile.write('\n{}'.format(sequence))
-					else:
-						reverse = complement(genome.seq[(end-basepairs):(start+basepairs)])
-						outfile.write('>{} {} {}-{}'.format(genome.description, island[0], start+basepairs, end-basepairs))
-						outfile.write('\n{}'.format(reverse))
-			
-			with open(sequence_file,'r') as f:
-				for line in f:
-					if not line.startswith('>'):
-						if island[9]=='NA':
-							island[9] = line.replace('\n','')
-						else :
-							validation.append([ID, island[5], island[9], line.replace('\n','')]) # to compare sequences
+				if not os.path.isfile(genome_file):
+					genome_file = 'genomes/sequence.{}.1.fasta'.format(island[0])
+					if not os.path.isfile(genome_file):
+						genome_file = 'genomes/sequence.{}.2.fasta'.format(island[0])
+						if not os.path.isfile(genome_file):
+							genomes_to_add.append(island[0])
+							fasta = False
+				if fasta:
+					genome = SeqIO.read(genome_file, "fasta")
+					with open(sequence_file, "w") as outfile:
+						if end-start > 0:
+							sequence = str(genome.seq[(start-basepairs):(end+basepairs)])
+							outfile.write('>{} {} {}-{}'.format(genome.description, island[0], start-basepairs, end+basepairs))
+							outfile.write('\n{}'.format(sequence))
+						else:
+							reverse = complement(genome.seq[(end-basepairs):(start+basepairs)])
+							outfile.write('>{} {} {}-{}'.format(genome.description, island[0], start+basepairs, end-basepairs))
+							outfile.write('\n{}'.format(reverse))
+			if island[9]=='NA':
+				if fasta :
+					with open(sequence_file,'r') as f:
+						for line in f:
+							if not line.startswith('>'):
+								island[9] = line.replace('\n','')
+			else :
+				validation.append([ID, island[5], island[9], line.replace('\n','')]) # to compare sequences
 
 	with open('sequences_validation.txt', 'a') as out:
 		for seq in validation:
 			out.write('\n'+'\t'.join(seq))
+	with open('genomes_to_add.txt', 'a') as out:
+		for acc_num in list(set(genomes_to_add)):
+			out.write('\n'+(acc_num.replace(' ','')))
 	return islands
 
 def complement(seq):
@@ -70,7 +84,7 @@ def island_viewer(columns_of_interest,file,positif_dataset,negative_dataset,acce
 				'ORGANISM',
 				'START',
 				'END',
-				'DETECTION',
+				'DETECTION'
 				]
 
 	with open(file,'r') as f:
@@ -86,7 +100,7 @@ def island_viewer(columns_of_interest,file,positif_dataset,negative_dataset,acce
 	islands = sequences(islands, basepairs)
 	Islands = pd.DataFrame.from_records(islands, columns=columns_of_interest, index='ACCESSION')
 	Islands.to_csv('table.{}.tsv'.format(file.split('/')[1]), sep='\t')
-
+	
 def pai_db(columns_of_interest,file,positif_dataset,negative_dataset,strain_index,basepairs):
 	""" parsing of files from pai-db, pai and rei
 		extract only the table sections 
@@ -179,16 +193,16 @@ def islander(columns_of_interest,file,positif_dataset,negative_dataset,basepairs
 				if section[2] in tables:
 					values[tables.index(section[2])] += line.split('VALUES ')[1].split('),(')
 	# island_sequence
-	sequences = {line.replace('\'','').replace('(','').split(',')[0] : line.replace('\'','').replace('(','').split(',')[1] for line in values[0]}
+	sequence = {line.replace('\'','').replace('(','').split(',')[0] : line.replace('\'','').replace('(','').split(',')[1] for line in values[0]}
 	# literature_islands
 	reference = [line.replace('\'','').split(',')[5] for line in values[2]] # only one reference, list of island ID with the reference
 	# island
 	for line in values[3]:
 		line = line.replace('(','').replace('\'','').split(',')
-		columns_index = {'ACCESSION':line[23],'ORGANISM':' '.join(line[24].split('_')), 'START':line[7], 'END':line[8], 'DETECTION': 'islander'}
+		columns_index = {'ACCESSION':line[23].replace(' ',''),'ORGANISM':' '.join((line[24].split(')')[0]).split('_')), 'START':line[7], 'END':line[8], 'DETECTION': 'islander'}
 		island = [columns_index[col] if col in columns_index else 'NA' for col in columns_of_interest]
 		island[6] = 'PMID:14681358' if island[0] in reference else 'NA'
-		island[9] = sequences[island[0]] if island[0] in sequences else 'NA'
+		island[9] = sequence[island[0]] if island[0] in sequence else 'NA'
 		island[7] = 'VP' if '{}-{}-{}'.format(island[0], island[2], island[3]) in positif_dataset else 'NA'
 		island[7] = 'NEG' if '{}-{}-{}'.format(island[0], island[2], island[3]) in negative_dataset else 'NA'
 		islands.append(island)
@@ -196,10 +210,10 @@ def islander(columns_of_interest,file,positif_dataset,negative_dataset,basepairs
 	for line in values[1]:
 		line = line.replace('(','').replace('\'','').split(',')
 		strain = line[line.index(''.join([element for element in line if element.startswith('NC_')])):] # different lenght of list
-		columns_index = {'ACCESSION':strain[0],'ORGANISM':strain[2], 'START':line[7], 'END':line[8], 'DETECTION': 'islander'}
+		columns_index = {'ACCESSION':strain[0].replace(' ',''),'ORGANISM':strain[2].split(')')[0], 'START':line[7], 'END':line[8], 'DETECTION': 'islander'}
 		island = [columns_index[col] if col in columns_index else 'NA' for col in columns_of_interest]
 		island[6] = 'PMID:14681358' if island[0] in reference else 'NA'
-		island[9] = sequences[island[0]] if island[0] in sequences else 'NA'
+		island[9] = sequence[island[0]] if island[0] in sequence else 'NA'
 		island[7] = 'VP' if '{}-{}-{}'.format(island[0], island[2], island[3]) in positif_dataset else 'NA'
 		island[7] = 'NEG' if '{}-{}-{}'.format(island[0], island[2], island[3]) in negative_dataset else 'NA'
 		islands.append(island)
@@ -254,8 +268,8 @@ def concatenate(columns_of_interest,files):
 @click.option('--basepairs', '-bp', help='number of base pair to add', default=50, type=int)
 @click.option('--cat', '-cat', help='concatenate all the csv', nargs=9)
 def main(file, positif, negative, database, basepairs, cat):
-	accession_nb_index = {nb.replace('\n','').split('\t')[0]:nb.replace('\n','').split('\t')[1] for nb in open('index.accession_number.txt','r')} 
-	strain_index = {nb.replace('\n','').split('\t')[1]:nb.replace('\n','').split('\t')[0] for nb in open('index.accession_number.txt','r')} 
+	accession_nb_index = {nb.replace('\n','').split('\t')[0]:nb.replace('\n','').split('\t')[1] for nb in open('index.acc_num.txt','r')} 
+	strain_index = {nb.replace('\n','').split('\t')[1]:nb.replace('\n','').split('\t')[0] for nb in open('index.acc_num.txt','r')} 
 	columns_of_interest = [
 					'ACCESSION', #0
 					'ORGANISM',  #1

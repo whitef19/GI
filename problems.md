@@ -218,8 +218,8 @@ sed 's/.fasta:>/\t/g' header |cut -f2|awk '{print $1"\t"$2,$3,$4,$5,$6,$7,$8,$9,
 
 
 # à faire et problèmes restants
-* références
 * déplacer les lignes manquant de l'information dans autre fichier
-* modifier les numéros d'accession avec ou sans .1, .2 ...
-* ajouter les séquences manquantes
+* modifier les numéros d'accession avec ou sans .1, .2 ... (solution temporaire dans le script parsing.py ligne 27-30)
+* ajouter les génomes manquants (python3 sequences.py -i genomes_to_add.txt && sh get_sequences.sh )
 * effectuer des blast pour comparer les séquences des bases de données avec celle ajouté des fasta (sequences_validation.txt)
+* ajouter les références
